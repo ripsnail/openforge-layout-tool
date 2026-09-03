@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OpenForge Layout Tool</title>
+  <link rel="stylesheet" href="/src/styles.css">
+</head>
+<body>
+  <div id="app">
+    <aside id="sidebar">
+      <div id="sidebar-header">
+        <h1>OpenForge</h1>
+        <p class="subtitle">Layout Tool</p>
+      </div>
+      <div id="search-box">
+        <input type="text" id="search-input" placeholder="Filter models..." />
+      </div>
+      <div id="model-palette">
+        <div class="loading">Loading models...</div>
+      </div>
+      <div id="bom-resize"></div>
+      <div id="bom-section">
+        <div class="bom-header">
+          <span>Materials</span>
+          <button id="bom-download-all" class="bom-download-btn" title="Download all placed STL files">Download All</button>
+        </div>
+        <div id="bom-list"></div>
+      </div>
+      <div id="override-panel"></div>
+    </aside>
+    <div id="sidebar-resize"></div>
+    <main id="viewport-area">
+      <div id="tab-bar">
+        <div id="tab-list"></div>
+        <div class="toolbar-dropdown" id="new-file-wrapper">
+          <button id="tab-new" title="New file">+</button>
+          <div id="new-file-menu" class="dropdown-menu">
+            <button data-action="new-blank">New Blank</button>
+            <button data-action="new-duplicate">Duplicate Current</button>
+          </div>
+        </div>
+      </div>
+      <div id="viewport">
+      <div id="loading-overlay">
+        <div class="loading-spinner"></div>
+        <div class="loading-text">Loading models...</div>
+      </div>
+      <div id="toolbar">
+        <div class="toolbar-dropdown">
+          <button class="tool-btn toolbar-menu-btn" id="file-btn">File</button>
+          <div class="dropdown-menu" id="file-menu">
+            <button data-action="save">Save Layout...</button>
+            <button data-action="load">Load Layout...</button>
+          </div>
+        </div>
+        <div class="toolbar-dropdown">
+          <button class="tool-btn toolbar-menu-btn" id="templates-btn">Templates</button>
+          <div class="dropdown-menu" id="templates-menu"></div>
+        </div>
+        <div class="toolbar-separator"></div>
+        <button class="tool-btn active" data-tool="select" title="Select (Q)">Select</button>
+        <button class="tool-btn" data-tool="place" title="Place (W)">Place</button>
+        <button class="tool-btn" data-tool="delete" title="Delete (D)">Delete</button>
+        <div class="toolbar-separator"></div>
+        <div class="toolbar-dropdown">
+          <button class="tool-btn toolbar-menu-btn" id="snap-btn">Snap</button>
+          <div class="dropdown-menu" id="snap-menu">
+            <div class="snap-settings">
+              <label class="snap-toggle"><input type="checkbox" data-snap="grid" checked><span>Grid</span></label>
+              <label class="snap-toggle experimental"><input type="checkbox" data-snap="edge"><span>Edge</span> <small>(experimental)</small></label>
+              <label class="snap-toggle experimental"><input type="checkbox" data-snap="corner"><span>Corner</span> <small>(experimental)</small></label>
+              <label class="snap-toggle experimental"><input type="checkbox" data-snap="openlock"><span>OpenLock</span> <small>(experimental)</small></label>
+              <label class="snap-toggle experimental"><input type="checkbox" data-snap="magnetic"><span>Magnetic</span> <small>(experimental)</small></label>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div id="info-bar">
+        <span id="model-count">Models: 0</span>
+        <span id="tool-info">Click a model in the palette to start</span>
+      </div>
+      </div>
+    </main>
+  </div>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
