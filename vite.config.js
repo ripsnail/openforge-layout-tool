@@ -162,7 +162,9 @@ function downloadedStlPlugin() {
           return;
         }
         const data = readFileSync(filePath);
-        res.writeHead(200, { 'Content-Type': 'model/stl', 'Content-Length': data.length, 'Cache-Control': 'no-store' });
+        // SHA-addressed content is immutable: allow long-lived browser caching
+        // so page refreshes don't re-download models.
+        res.writeHead(200, { 'Content-Type': 'model/stl', 'Content-Length': data.length, 'Cache-Control': 'public, max-age=31536000, immutable' });
         res.end(data);
       });
 
@@ -185,7 +187,7 @@ function downloadedStlPlugin() {
               writeFileSync(filePath, Buffer.concat(body));
               const shaMatch = fileName.match(/^([0-9a-f]{32})\.stl$/i);
               if (shaMatch) {
-                try { setStlCached.run(1, shaMatch[1].toLowerCase()); } catch (e) {}
+                try { setStlCached.run(1, shaMatch[1].toLowerCase()); } catch (e) {/* ignore */ }
               }
               res.writeHead(200, { 'Content-Type': 'application/json' });
               res.end(JSON.stringify({ ok: true }));
@@ -205,8 +207,10 @@ function downloadedStlPlugin() {
           if (existsSync(filePath)) {
             const data = readFileSync(filePath);
             const ext = fileName.split('.').pop().toLowerCase();
-            const mime = ext === 'stl' ? 'model/stl' : `application/${ext}`;
-            res.writeHead(200, { 'Content-Type': mime, 'Content-Length': data.length, 'Cache-Control': 'no-store' });
+            const mime = ext === 'stl' ? 'model/stl' : ext === 'png' ? 'image/png' : `application/${ext}`;
+            // SHA-named STLs and cached thumbs are immutable content: cache long-lived.
+            const immutable = /^[0-9a-f]{32}\.stl$/i.test(fileName) || fileName.startsWith('thumbs/');
+            res.writeHead(200, { 'Content-Type': mime, 'Content-Length': data.length, 'Cache-Control': immutable ? 'public, max-age=31536000, immutable' : 'no-store' });
             res.end(req.method === 'HEAD' ? null : data);
           } else {
             res.writeHead(404);
@@ -224,7 +228,7 @@ function downloadedStlPlugin() {
           }
           const shaMatch = fileName.match(/^([0-9a-f]{32})\.stl$/i);
           if (shaMatch) {
-            try { setStlCached.run(0, shaMatch[1].toLowerCase()); } catch (e) {}
+            try { setStlCached.run(0, shaMatch[1].toLowerCase()); } catch (e) {/* ignore */}
           }
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ ok: true }));

@@ -4,14 +4,12 @@ const LEGACY_KEY = 'openforge-layout';
 
 let files = [];
 let activeId = null;
-let onSwitch = null;
 
 function generateId() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 }
 
-export function initFileManager(callback) {
-  onSwitch = callback;
+export function initFileManager() {
 
   let stored;
   try {
@@ -25,8 +23,8 @@ export function initFileManager(callback) {
     if (legacyData) {
       const id = generateId();
       files = [{ id, name: 'Untitled' }];
-      try { localStorage.setItem('openforge-layout-' + id, legacyData); } catch (e) {}
-      try { localStorage.removeItem(LEGACY_KEY); } catch (e) {}
+      try { localStorage.setItem('openforge-layout-' + id, legacyData); } catch (e) { /* ignore localStorage errors */ }
+      try { localStorage.removeItem(LEGACY_KEY); } catch (e) { /* ignore localStorage errors */ }
     } else {
       const id = generateId();
       files = [{ id, name: 'Untitled' }];
@@ -58,11 +56,11 @@ export function getActiveName() {
 }
 
 function saveIndex() {
-  try { localStorage.setItem(FILES_KEY, JSON.stringify(files)); } catch (e) {}
+  try { localStorage.setItem(FILES_KEY, JSON.stringify(files)); } catch (e) {/* ignore localStorage errors */ }
 }
 
 function saveActiveId() {
-  try { localStorage.setItem(ACTIVE_KEY, activeId); } catch (e) {}
+  try { localStorage.setItem(ACTIVE_KEY, activeId); } catch (e) {/* ignore localStorage errors */ }
 }
 
 function fileKey(id) {
@@ -70,7 +68,24 @@ function fileKey(id) {
 }
 
 export function saveFileData(id, data) {
-  try { localStorage.setItem(fileKey(id), JSON.stringify(data)); } catch (e) {}
+  try {
+    localStorage.setItem(fileKey(id), JSON.stringify(data));
+    return true;
+  } catch (e) {
+    warnQuotaOnce('layout', e);
+    return false;
+  }
+}
+
+let quotaWarned = false;
+function warnQuotaOnce(what, e) {
+  if (quotaWarned) return;
+  quotaWarned = true;
+  console.warn(
+    `Failed to save ${what} — browser storage is full. ` +
+    `Export your work to a file to avoid losing it.`,
+    e
+  );
 }
 
 export function loadFileData(id) {
@@ -111,7 +126,7 @@ export function deleteFile(id) {
   if (idx < 0) return false;
 
   files.splice(idx, 1);
-  try { localStorage.removeItem(fileKey(id)); } catch (e) {}
+  try { localStorage.removeItem(fileKey(id)); } catch (e) {/* ignore localStorage errors */ }
   saveIndex();
 
   if (activeId === id) {

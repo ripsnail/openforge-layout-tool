@@ -1,4 +1,14 @@
-node_modules
-dist
-downloaded
+node_modules/
+dist/
+# Keep downloaded directories tracked but ignore their contents; allow .gitkeep files
+downloaded/*
+!downloaded/.gitkeep
+downloaded/thumbs/*
+!downloaded/thumbs/.gitkeep
 models/
+
+metadata.sqlite
+*.stl
+.DS_Store
+.env
+*.log

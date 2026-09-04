@@ -1,15 +1,13 @@
 import * as THREE from 'three';
-import { loadModelGeometry, createMesh, createGhostMesh, createOutlineMesh } from './modelLoader.js';
-import { isFloorTile, isWallTile, isBaseTile, isColumnTile, isCornerTile, isWallBaseTile, hasS2W, getTileFootprintMm, getTileWidthMm, getTileDepthMm, parseModelFilename, getThemeColor } from './modelCatalog.js';
+import { loadModelGeometry, createMesh, createGhostMesh, createOutlineMesh, recolorMesh, disposeMeshMaterial, pruneGeometries } from './modelLoader.js';
+import { isWallTile, isBaseTile, isColumnTile, isWallBaseTile, getTileFootprintMm, parseModelFilename, getThemeColor, TEXTURE_OPTIONS, getTextureOverride, setTextureOverride, getEffectiveTextureTags, deriveTextureTags, formatTextureTag, escapeHtml, applyFilenameTextureOverrides } from './modelCatalog.js';
 import { UndoRedoManager, PlaceCommand, RemoveCommand, MoveCommand, RotateCommand, GroupRotateCommand, BatchCommand } from './undoRedo.js';
-import { ConnectionIndicatorSystem } from './connectionIndicators.js';
-import { findBestSnap, getSnapPoints, getSnapSettings } from './snapPoints.js';
-import { getManifest } from './downloadedModels.js';
+import { getManifest, syncMetadataToServer, saveManifest, addDownloadedModelEntry } from './downloadedModels.js';
 import { resolveTemplateTiles } from './templates.js';
 import { saveFileData, loadFileData, getActiveId } from './fileManager.js';
+import { fetchWithTimeout } from './catalogApi.js';
 
 const INCH = 25.4;
-const HALF_INCH = INCH / 2;
 const QUARTER_INCH = INCH / 4;
 const SNAP_RADIUS = INCH * 5;
 
@@ -31,12 +29,10 @@ export class PlacementSystem {
     this.templateGhosts = [];
     this.selectedMeshes = [];
     this.outlineMeshes = [];
-    this.snapGuides = [];
     this.placedMeshes = [];
     this.currentTool = 'select';
 
     this.undoRedo = new UndoRedoManager();
-    this.connectionIndicators = new ConnectionIndicatorSystem(scene);
     this._clipboard = [];
 
     this.raycaster = new THREE.Raycaster();
@@ -46,6 +42,11 @@ export class PlacementSystem {
     this.pendingSnap = null;
     this._pendingPlaceRotation = 0;
     this._pendingPlaceHeight = 0;
+
+    // rAF coalescing for pointermove: at most one snap/ghost update frame
+    // per animation frame, no matter how many mousemove events fire.
+    this._pointerFrameQueued = false;
+    this._coalescedPointer = null;
 
     this._isDragging = false;
     this._dragStartPoint = null;
@@ -100,6 +101,11 @@ export class PlacementSystem {
     target.addEventListener('pointerup', this._onPointerUp);
     target.addEventListener('contextmenu', this._onContextMenu);
     window.addEventListener('keydown', this._onKeyDown);
+    target.addEventListener('pointerdown', (e) => {
+      if (this._contextMesh && !e.target.closest('#context-menu')) {
+        this._hideContextMenu();
+      }
+    });
   }
 
   setTool(tool) {
@@ -109,8 +115,6 @@ export class PlacementSystem {
       this._clearTemplateGhosts();
       this.activeTemplate = null;
       this.templateTiles = [];
-      this._clearSnapGuides();
-      this.connectionIndicators.clear();
       this._pendingPlaceRotation = 0;
       this._pendingPlaceHeight = 0;
     }
@@ -129,8 +133,6 @@ export class PlacementSystem {
     this.activeModel = modelInfo;
     this.activeGeometry = null;
     this._clearGhost();
-    this._clearSnapGuides();
-    this.connectionIndicators.clear();
     this._pendingPlaceRotation = 0;
     this._pendingPlaceHeight = 0;
 
@@ -158,8 +160,6 @@ export class PlacementSystem {
     this._clearTemplateGhosts();
     this.activeTemplate = null;
     this.templateTiles = [];
-    this._clearSnapGuides();
-    this.connectionIndicators.clear();
     this._pendingPlaceRotation = 0;
     this._pendingPlaceHeight = 0;
     this.setTool('place');
@@ -230,7 +230,6 @@ export class PlacementSystem {
       const collision = this._checkCollision(t.pos, t.rot.y, t.modelInfo);
       ghost.material.color.setHex(collision ? 0xcc4444 : 0x44cc88);
     }
-    this._updateSnapGuides(lifted);
     this._requestRenderFrame();
   }
 
@@ -250,8 +249,6 @@ export class PlacementSystem {
     this.undoRedo.execute(new BatchCommand(commands));
     this._updateBom();
     this._updateModelCount();
-    this._clearSnapGuides();
-    this.connectionIndicators.clear();
     this._saveState();
     this._requestRenderFrame();
   }
@@ -287,6 +284,16 @@ export class PlacementSystem {
     this._requestRenderFrame();
   }
 
+  recolorTheme(theme) {
+    for (const mesh of this.placedMeshes) {
+      const mi = mesh.userData.modelInfo;
+      if (mi && mi.theme === theme) {
+        recolorMesh(mesh, mi);
+      }
+    }
+    this._requestRenderFrame();
+  }
+
   _updateToolbar() {
     document.querySelectorAll('.tool-btn').forEach(btn => {
       btn.classList.toggle('active', btn.dataset.tool === this.currentTool);
@@ -315,8 +322,7 @@ export class PlacementSystem {
       this._clearTemplateGhosts();
       this.activeTemplate = null;
       this.templateTiles = [];
-      this._clearSnapGuides();
-      this.connectionIndicators.clear();
+      
       return;
     }
 
@@ -381,9 +387,24 @@ export class PlacementSystem {
   }
 
   _onPointerMove(e) {
-    const rect = e.currentTarget.getBoundingClientRect();
-    this.pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
-    this.pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+    // Snapshot coordinates and coalesce: mousemove can fire far more often
+    // than the display refreshes; the expensive snap/ghost/indicator work
+    // below runs at most once per frame using the latest position.
+    this._coalescedPointer = { x: e.clientX, y: e.clientY, target: e.currentTarget };
+    if (this._pointerFrameQueued) return;
+    this._pointerFrameQueued = true;
+    requestAnimationFrame(() => {
+      this._pointerFrameQueued = false;
+      const p = this._coalescedPointer;
+      this._coalescedPointer = null;
+      if (p && p.target?.isConnected !== false) this._processPointerMove(p.x, p.y, p.target);
+    });
+  }
+
+  _processPointerMove(clientX, clientY, target) {
+    const rect = target.getBoundingClientRect();
+    this.pointer.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+    this.pointer.y = -((clientY - rect.top) / rect.height) * 2 + 1;
 
     if (this.currentTool === 'place' && this.activeTemplate && this.templateTiles.length > 0) {
       const intersectPoint = this._getGroundIntersect();
@@ -396,8 +417,6 @@ export class PlacementSystem {
         this.updateInfo();
       } else {
         for (const ghost of this.templateGhosts) ghost.visible = false;
-        this._clearSnapGuides();
-        this.connectionIndicators.clear();
       }
     }
 
@@ -408,12 +427,10 @@ export class PlacementSystem {
         this.pendingSnap = snap;
         const rot = snap.type === 'point-pair' ? snap.rotation : snap.rotation + this._pendingPlaceRotation;
         this._updateGhost(snap.position, rot);
-        this.connectionIndicators.show(this.activeModel, snap.position, rot, this.activeGeometry);
+        
         this.updateInfo();
       } else {
-        this._clearGhost();
-        this._clearSnapGuides();
-        this.connectionIndicators.clear();
+        this._clearGhost();        
       }
     }
 
@@ -441,8 +458,8 @@ export class PlacementSystem {
     }
 
     if (this._isMarquee && this._marqueeStart) {
-      const dx = e.clientX - this._marqueeStart.x;
-      const dy = e.clientY - this._marqueeStart.y;
+      const dx = clientX - this._marqueeStart.x;
+      const dy = clientY - this._marqueeStart.y;
       if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
         if (!this._marqueeEl) {
           this._marqueeEl = document.createElement('div');
@@ -451,10 +468,10 @@ export class PlacementSystem {
           this.controls.enabled = false;
         }
         const vp = document.querySelector('#viewport').getBoundingClientRect();
-        const x1 = Math.max(0, Math.min(this._marqueeStart.x - vp.left, e.clientX - vp.left));
-        const y1 = Math.max(0, Math.min(this._marqueeStart.y - vp.top, e.clientY - vp.top));
-        const x2 = Math.min(vp.width, Math.max(this._marqueeStart.x - vp.left, e.clientX - vp.left));
-        const y2 = Math.min(vp.height, Math.max(this._marqueeStart.y - vp.top, e.clientY - vp.top));
+        const x1 = Math.max(0, Math.min(this._marqueeStart.x - vp.left, clientX - vp.left));
+        const y1 = Math.max(0, Math.min(this._marqueeStart.y - vp.top, clientY - vp.top));
+        const x2 = Math.min(vp.width, Math.max(this._marqueeStart.x - vp.left, clientX - vp.left));
+        const y2 = Math.min(vp.height, Math.max(this._marqueeStart.y - vp.top, clientY - vp.top));
         this._marqueeEl.style.left = x1 + 'px';
         this._marqueeEl.style.top = y1 + 'px';
         this._marqueeEl.style.width = (x2 - x1) + 'px';
@@ -524,10 +541,6 @@ export class PlacementSystem {
         this._pendingPlaceRotation += Math.PI / 2;
         const snapType = this.pendingSnap?.type;
         this.ghostMesh.rotation.y = snapType === 'point-pair' ? (this.pendingSnap?.rotation || 0) : (this.pendingSnap?.rotation || 0) + this._pendingPlaceRotation;
-        if (this.activeModel) {
-          const rot = snapType === 'point-pair' ? (this.pendingSnap?.rotation || 0) : this._pendingPlaceRotation;
-          this.connectionIndicators.show(this.activeModel, this.ghostMesh.position, rot);
-        }
         this.updateInfo();
         this._requestRenderFrame();
       } else if (this.selectedMeshes.length > 0) {
@@ -636,13 +649,13 @@ export class PlacementSystem {
     }
 
     if (e.key === 'Escape') {
+      this._hideContextMenu();
       this._deselectAll();
       this._clearGhost();
       this._clearTemplateGhosts();
       this.activeTemplate = null;
       this.templateTiles = [];
-      this._clearSnapGuides();
-      this.connectionIndicators.clear();
+      
       this._pendingPlaceRotation = 0;
       this._pendingPlaceHeight = 0;
       this.setTool('select');
@@ -656,8 +669,127 @@ export class PlacementSystem {
     this._clearTemplateGhosts();
     this.activeTemplate = null;
     this.templateTiles = [];
-    this._clearSnapGuides();
-    this.connectionIndicators.clear();
+    
+
+    const viewport = document.querySelector('#viewport');
+    if (!viewport) return;
+    const rect = viewport.getBoundingClientRect();
+    this.pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+    this.pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+
+    const hits = this._raycastPlaced();
+    if (hits.length === 0) {
+      this._hideContextMenu();
+      return;
+    }
+
+    const mesh = hits[0].object;
+    if (!this.selectedMeshes.includes(mesh)) {
+      this._deselectAll();
+      this._selectModel(mesh);
+    }
+    this._showContextMenu(e.clientX - rect.left, e.clientY - rect.top, mesh);
+  }
+
+  _hideContextMenu() {
+    const menu = document.querySelector('#context-menu');
+    if (menu) menu.remove();
+    this._contextMesh = null;
+  }
+
+  _showContextMenu(x, y, mesh) {
+    this._hideContextMenu();
+    this._contextMesh = mesh;
+
+    const viewport = document.querySelector('#viewport');
+    if (!viewport) return;
+
+    const menu = document.createElement('div');
+    menu.id = 'context-menu';
+    menu.className = 'context-menu';
+
+    const mi = mesh.userData.modelInfo || {};
+    const textureTags = getEffectiveTextureTags(mi) || [];
+    const header = document.createElement('div');
+    header.className = 'context-menu-header';
+    header.textContent = mi.fileName || mi.displayName || 'Model';
+    menu.appendChild(header);
+
+    const sep = document.createElement('div');
+    sep.className = 'context-menu-sep';
+    menu.appendChild(sep);
+
+    if (textureTags.length > 0) {
+      const tagsLabel = document.createElement('div');
+      tagsLabel.className = 'context-menu-section';
+      tagsLabel.textContent = 'Texture Tags';
+      menu.appendChild(tagsLabel);
+
+      for (const t of textureTags) {
+        const tagItem = document.createElement('div');
+        tagItem.className = 'context-menu-tag' + (t.override ? ' override' : '');
+        tagItem.textContent = formatTextureTag(t);
+        menu.appendChild(tagItem);
+      }
+
+      const sep2 = document.createElement('div');
+      sep2.className = 'context-menu-sep';
+      menu.appendChild(sep2);
+    }
+
+    const label = document.createElement('div');
+    label.className = 'context-menu-section';
+    label.textContent = 'Texture';
+    menu.appendChild(label);
+
+    const currentOverride = getTextureOverride(textureTags);
+
+    for (const opt of TEXTURE_OPTIONS) {
+      const item = document.createElement('button');
+      item.className = 'context-menu-item' + (opt.name === currentOverride ? ' active' : '');
+      item.textContent = opt.label;
+      item.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this._setTextureOverride(mesh, opt.name);
+        this._hideContextMenu();
+      });
+      menu.appendChild(item);
+    }
+
+    if (currentOverride) {
+      const sep2 = document.createElement('div');
+      sep2.className = 'context-menu-sep';
+      menu.appendChild(sep2);
+
+      const clear = document.createElement('button');
+      clear.className = 'context-menu-item';
+      clear.textContent = 'Remove texture override';
+      clear.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this._setTextureOverride(mesh, null);
+        this._hideContextMenu();
+      });
+      menu.appendChild(clear);
+    }
+
+    viewport.appendChild(menu);
+
+    const mw = menu.offsetWidth;
+    const mh = menu.offsetHeight;
+    const left = Math.min(x, viewport.clientWidth - mw - 4);
+    const top = Math.min(y, viewport.clientHeight - mh - 4);
+    menu.style.left = Math.max(4, left) + 'px';
+    menu.style.top = Math.max(4, top) + 'px';
+  }
+
+  _setTextureOverride(mesh, name) {
+    const mi = mesh.userData.modelInfo;
+    if (!mi) return;
+    mi.textureTags = setTextureOverride(mi.textureTags, name);
+    recolorMesh(mesh, mi);
+    this._syncOutlines();
+    this._saveState();
+    this._requestRenderFrame();
   }
 
   _onPointerUp(e) {
@@ -851,8 +983,8 @@ export class PlacementSystem {
   }
 
   _snapWithConnections(rawPoint, modelInfo, placeRotation) {
-    const settings = getSnapSettings();
-    const anySnapEnabled = settings.edge || settings.corner || settings.openlock || settings.magnetic;
+    // snapPoints module removed — default to grid snapping enabled
+    const settings = { grid: true };
     const gridPoint = settings.grid ? this._snapToGrid(rawPoint) : rawPoint;
 
     if (modelInfo.typeTags.includes('secret_door')) {
@@ -879,16 +1011,8 @@ export class PlacementSystem {
       return { position: gridPt, rotation: 0, type: 'grid' };
     }
 
-    if (anySnapEnabled) {
-      const pointSnap = findBestSnap(rawPoint, modelInfo, placeRotation, this.placedMeshes, SNAP_RADIUS, this.activeGeometry);
-      if (pointSnap) {
-        const placedInfo = pointSnap.placedMesh?.userData.modelInfo;
-        const bothBases = isBaseTile(modelInfo) && isBaseTile(placedInfo);
-        pointSnap.position.y = bothBases ? 0 : (pointSnap.placedMesh?.userData.height || 0);
-        log(`point-pair snap → y=${pointSnap.position.y} bothBases=${bothBases}`);
-        return pointSnap;
-      }
-    }
+    // point-pair snapping (openlock/magnetic) disabled — always fall back
+    // to grid/free snapping.
 
     log(`${settings.grid ? 'grid' : 'free'} snap → (${gridPoint.x.toFixed(1)}, ${gridPoint.z.toFixed(1)})`);
     return { position: gridPoint, rotation: 0, type: settings.grid ? 'grid' : 'free' };
@@ -1025,101 +1149,17 @@ export class PlacementSystem {
     const collision = this._checkCollision(gp, rotation, this.activeModel);
     this.ghostMesh.material.color.setHex(collision ? 0xcc4444 : 0x44cc88);
 
-    this._updateSnapGuides(gp);
     this._requestRenderFrame();
   }
 
   _clearGhost() {
     if (this.ghostMesh) {
       this.scene.remove(this.ghostMesh);
+      disposeMeshMaterial(this.ghostMesh);
       this.ghostMesh = null;
     }
     this.pendingSnap = null;
     this._requestRenderFrame();
-  }
-
-  _updateSnapGuides(point) {
-    this._clearSnapGuides();
-
-    for (const placed of this.placedMeshes) {
-      const pInfo = placed.userData.modelInfo;
-      if (!pInfo) continue;
-
-      const pf = getTileFootprintMm(pInfo);
-      const pRot = placed.rotation.y;
-      const pw = Math.abs(Math.cos(pRot)) * pf.w + Math.abs(Math.sin(pRot)) * pf.d;
-      const pd = Math.abs(Math.sin(pRot)) * pf.w + Math.abs(Math.cos(pRot)) * pf.d;
-      const px = placed.position.x;
-      const pz = placed.position.z;
-      const dx = Math.abs(point.x - px);
-      const dz = Math.abs(point.z - pz);
-
-      const activeFp = this.activeModel ? getTileFootprintMm(this.activeModel) : pf;
-      const activeRot = this._pendingPlaceRotation || 0;
-      const activeW = Math.abs(Math.cos(activeRot)) * activeFp.w + Math.abs(Math.sin(activeRot)) * activeFp.d;
-      const activeD = Math.abs(Math.sin(activeRot)) * activeFp.w + Math.abs(Math.cos(activeRot)) * activeFp.d;
-
-      const nearEdgeX = Math.abs(dx - (pw + activeW) / 2) < INCH * 0.5;
-      const nearEdgeZ = Math.abs(dz - (pd + activeD) / 2) < INCH * 0.5;
-
-      let highlight = false;
-      if (isFloorTile(pInfo) && this.activeModel && isFloorTile(this.activeModel)) {
-        highlight = nearEdgeX || nearEdgeZ;
-      } else if (hasS2W(pInfo) && this.activeModel && isWallTile(this.activeModel)) {
-        const onEdgeX = Math.abs(dx - pw / 2) < INCH * 0.5 && dz < INCH * 1.5;
-        const onEdgeZ = Math.abs(dz - pd / 2) < INCH * 0.5 && dx < INCH * 1.5;
-        highlight = onEdgeX || onEdgeZ;
-      } else if (isBaseTile(pInfo) && this.activeModel) {
-        highlight = nearEdgeX || nearEdgeZ;
-      }
-
-      if (highlight) {
-        const hlMat = new THREE.MeshBasicMaterial({
-          color: 0x44cc88,
-          transparent: true,
-          opacity: 0.15,
-          side: THREE.DoubleSide,
-          depthWrite: false,
-        });
-        const hlGeo = new THREE.PlaneGeometry(pw + INCH * 0.5, pd + INCH * 0.5);
-        const hlMesh = new THREE.Mesh(hlGeo, hlMat);
-        hlMesh.rotation.x = -Math.PI / 2;
-        hlMesh.position.set(px, 0.1, pz);
-        hlMesh.name = 'snap-guide';
-        this.scene.add(hlMesh);
-        this.snapGuides.push(hlMesh);
-
-        const edgeMat = new THREE.LineBasicMaterial({
-          color: 0x44cc88,
-          transparent: true,
-          opacity: 0.8,
-        });
-
-        const halfW = pw / 2 + INCH * 0.25;
-        const halfD = pd / 2 + INCH * 0.25;
-        const edgePoints = [
-          new THREE.Vector3(px - halfW, 0.15, pz - halfD),
-          new THREE.Vector3(px + halfW, 0.15, pz - halfD),
-          new THREE.Vector3(px + halfW, 0.15, pz + halfD),
-          new THREE.Vector3(px - halfW, 0.15, pz + halfD),
-          new THREE.Vector3(px - halfW, 0.15, pz - halfD),
-        ];
-        const edgeGeo = new THREE.BufferGeometry().setFromPoints(edgePoints);
-        const edgeLine = new THREE.Line(edgeGeo, edgeMat);
-        edgeLine.name = 'snap-guide';
-        this.scene.add(edgeLine);
-        this.snapGuides.push(edgeLine);
-      }
-    }
-  }
-
-  _clearSnapGuides() {
-    for (const guide of this.snapGuides) {
-      this.scene.remove(guide);
-      if (guide.geometry) guide.geometry.dispose();
-      if (guide.material) guide.material.dispose();
-    }
-    this.snapGuides = [];
   }
 
   _placeModel(point, rotation) {
@@ -1134,8 +1174,6 @@ export class PlacementSystem {
     this._updateBom();
     this._updateModelCount();
 
-    this._clearSnapGuides();
-    this.connectionIndicators.clear();
     this._saveState();
     this._requestRenderFrame();
   }
@@ -1230,12 +1268,17 @@ export class PlacementSystem {
     this._requestRenderFrame();
   }
 
+  _placedCacheKeys() {
+    return new Set(this.placedMeshes.map(m => m.userData.modelInfo?._id || m.userData.modelInfo?.fileName).filter(Boolean));
+  }
+
   _removeModel(mesh) {
     const idx = this.selectedMeshes.indexOf(mesh);
     if (idx >= 0) {
       this.selectedMeshes.splice(idx, 1);
     }
     this.undoRedo.execute(new RemoveCommand(this, mesh));
+    pruneGeometries(this._placedCacheKeys());
     this._updateBom();
     this._updateModelCount();
     this._clearOutlines();
@@ -1264,6 +1307,9 @@ export class PlacementSystem {
         rz: m.rotation.z,
         storageUrl: m.userData.modelInfo.storageUrl || null,
         catalogId: m.userData.modelInfo.catalogId || null,
+        textureTags: getTextureOverride(m.userData.modelInfo.textureTags)
+          ? m.userData.modelInfo.textureTags.filter(t => t.override)
+          : undefined,
       })),
     };
   }
@@ -1272,9 +1318,10 @@ export class PlacementSystem {
     this.undoRedo.clear();
     for (const m of [...this.placedMeshes]) {
       this.scene.remove(m);
-      m.material?.dispose();
+      disposeMeshMaterial(m);
     }
     this.placedMeshes = [];
+    pruneGeometries(new Set());
     this._deselectAll();
     this._requestRenderFrame();
 
@@ -1294,19 +1341,39 @@ export class PlacementSystem {
       storageUrl: m.userData.modelInfo.storageUrl || null,
       catalogId: m.userData.modelInfo.catalogId || null,
       sha: m.userData.modelInfo.sha || null,
+      textureTags: getTextureOverride(m.userData.modelInfo.textureTags)
+        ? m.userData.modelInfo.textureTags.filter(t => t.override)
+        : undefined,
     }));
     saveFileData(getActiveId(), { version: 1, tiles });
   }
 
   async _loadFromData(data) {
     const manifest = getManifest();
+    // Phase 1 (sync): resolve model info for every tile — manifest lookup,
+    // legacy heals, saved overrides. No I/O here.
+    const resolved = [];
     for (const item of data) {
       let modelInfo;
       const entry = item._id ? manifest.find(m => m._id === item._id) : null;
       if (entry?.modelInfo) {
         modelInfo = { ...entry.modelInfo };
         if (item._id) modelInfo._id = item._id;
-        if (modelInfo.theme) modelInfo.color = getThemeColor(modelInfo.theme);
+        // Heal legacy entries stored before textureTags existed: derive from
+        // the raw tags and push the healed record back to the metadata DB.
+        if ((!modelInfo.textureTags || modelInfo.textureTags.length === 0) && modelInfo.tags?.length > 0) {
+          const healed = deriveTextureTags(modelInfo.tags);
+          if (healed.length > 0) {
+            modelInfo.textureTags = healed;
+            entry.modelInfo = { ...entry.modelInfo, textureTags: healed };
+            try { saveManifest(); } catch (e) { /* non-fatal */ }
+            if (modelInfo.sha) {
+              try { syncMetadataToServer(modelInfo); } catch (e) { /* non-fatal */ }
+            }
+          }
+        }
+        // NOTE: no color assignment here — createMesh() recomputes the color
+        // via resolveModelColor(), so writing it would be redundant work.
       } else {
         modelInfo = parseModelFilename(item.fileName);
         if (item._id) modelInfo._id = item._id;
@@ -1320,21 +1387,43 @@ export class PlacementSystem {
       if (item.sha && !modelInfo.sha) {
         modelInfo.sha = item.sha;
       }
+      if (item.textureTags && item.textureTags.length > 0) {
+        modelInfo.textureTags = setTextureOverride(modelInfo.textureTags, item.textureTags[0].name);
+      }
+      // Ensure any filename-based texture overrides are applied.
+      applyFilenameTextureOverrides(modelInfo);
+      // If this model isn't already in the saved manifest, add it so the
+      // browser keeps track of models referenced by loaded layouts.
+      if (!entry) {
+        try { addDownloadedModelEntry(modelInfo); } catch (e) { /* non-fatal */ }
+      }
+      resolved.push({ item, modelInfo });
+    }
+    // Phase 2: load all geometries concurrently (was serial: N× latency).
+    const geos = await Promise.all(resolved.map(async ({ item, modelInfo }) => {
       try {
-        const geo = await loadModelGeometry(modelInfo);
-        const mesh = createMesh(geo, modelInfo);
-        mesh.position.set(item.x, item.y, item.z);
-        mesh.rotation.set(item.rx || 0, item.ry || 0, item.rz || 0);
-        this.scene.add(mesh);
-        this.placedMeshes.push(mesh);
-        this._requestRenderFrame();
+        return await loadModelGeometry(modelInfo);
       } catch (e) {
         console.warn('Failed to restore model:', item.fileName);
+        return null;
       }
+    }));
+    // Phase 3: create meshes in saved order.
+    for (let i = 0; i < resolved.length; i++) {
+      if (!geos[i]) continue;
+      const { item, modelInfo } = resolved[i];
+      const mesh = createMesh(geos[i], modelInfo);
+      mesh.position.set(item.x, item.y, item.z);
+      mesh.rotation.set(item.rx || 0, item.ry || 0, item.rz || 0);
+      this.scene.add(mesh);
+      this.placedMeshes.push(mesh);
     }
 
+    this._requestRenderFrame();
     this._updateModelCount();
     this._updateBom();
+    // Auto-save loaded state so the freshly-loaded layout is persisted.
+    this._saveState();
   }
 
   async loadState() {
@@ -1359,14 +1448,13 @@ export class PlacementSystem {
   clearScene() {
     this._deselectAll();
     this._clearGhost();
-    this._clearSnapGuides();
-    this.connectionIndicators.clear();
     this.undoRedo.clear();
     for (const m of [...this.placedMeshes]) {
       this.scene.remove(m);
-      m.material?.dispose();
+      disposeMeshMaterial(m);
     }
     this.placedMeshes = [];
+    pruneGeometries(new Set());
     this._updateModelCount();
     this._updateBom();
   }
@@ -1385,7 +1473,7 @@ export class PlacementSystem {
       return;
     }
     list.innerHTML = entries.map(([name, count]) =>
-      `<div class="bom-item"><span class="bom-name" title="${name}">${name}</span><span class="bom-count">${count}</span></div>`
+      `<div class="bom-item"><span class="bom-name" title="${escapeHtml(name)}">${escapeHtml(name)}</span><span class="bom-count">${count}</span></div>`
     ).join('');
   }
 
@@ -1401,7 +1489,7 @@ export class PlacementSystem {
       if (!url) continue;
 
       try {
-        const resp = await fetch(url);
+        const resp = await fetchWithTimeout(url, {}, 120000);
         if (!resp.ok) continue;
         const blob = await resp.blob();
         const a = document.createElement('a');

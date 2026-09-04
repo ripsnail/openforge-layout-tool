@@ -93,7 +93,6 @@ export const SNAP_BEHAVIOR_FIELDS = [
   { key: 'isBase', label: 'Is Base Tile', type: 'checkbox' },
   { key: 'acceptsWalls', label: 'Accepts Walls', type: 'checkbox' },
   { key: 'acceptsFloors', label: 'Accepts Floors (stackable)', type: 'checkbox' },
-  { key: 'snapsToCorners', label: 'Snaps to Corners', type: 'checkbox' },
   { key: 'customSnapRadius', label: 'Custom Snap Radius (mm)', type: 'number', min: 0, max: 500, step: 1 },
 ];
 
@@ -127,7 +126,6 @@ export function buildOverrideFromUI(uiState) {
   if (uiState.isBase) snap.isBase = true;
   if (uiState.acceptsWalls) snap.acceptsWalls = true;
   if (uiState.acceptsFloors) snap.acceptsFloors = true;
-  if (uiState.snapsToCorners) snap.snapsToCorners = true;
   if (uiState.customSnapRadius) {
     const radius = parseFloat(uiState.customSnapRadius);
     if (!isNaN(radius)) snap.customSnapRadius = radius;

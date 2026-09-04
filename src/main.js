@@ -2,9 +2,10 @@ import { initScene } from './scene.js';
 import { initPalette } from './catalogPalette.js';
 import { PlacementSystem } from './placement.js';
 import { initOverrides } from './modelOverrides.js';
+import { getThemeColor } from './modelCatalog.js';
+import { initSettings, getThemeColorOverride, setThemeColorOverride, getThemeLabels } from './settings.js';
 import { TEMPLATES, initUserTemplates, getUserTemplates, saveUserTemplate, deleteUserTemplate, selectionToTemplate } from './templates.js';
-import { setSnapSettings } from './snapPoints.js';
-import { clearScanCache } from './modelScanner.js';
+// snap settings and UI removed
 import {
   initFileManager, getFiles, getActiveId, getActiveName,
   createFile, renameFile, deleteFile, switchToFile,
@@ -197,24 +198,73 @@ function renderTemplatesMenu(menu, placement) {
   }
 }
 
-function initSnapMenu() {
-  const btn = document.getElementById('snap-btn');
-  const menu = document.getElementById('snap-menu');
+// initSnapMenu removed — snapping UI and experimental openlock/magnetic
+// controls were removed intentionally.
+
+function hexToPickerValue(color) {
+  if (typeof color === 'number') {
+    return '#' + color.toString(16).padStart(6, '0');
+  }
+  return color || '#888888';
+}
+
+function initSettingsMenu(placement) {
+  const btn = document.getElementById('settings-btn');
+  const menu = document.getElementById('settings-menu');
   if (!btn || !menu) return;
+
+  function renderSettingsMenu() {
+    menu.innerHTML = '';
+
+    const title = document.createElement('div');
+    title.className = 'settings-section';
+    title.textContent = 'Theme Colors';
+    menu.appendChild(title);
+
+    const labels = getThemeLabels();
+    for (const [theme, label] of Object.entries(labels)) {
+      const row = document.createElement('div');
+      row.className = 'settings-row';
+
+      const name = document.createElement('label');
+      name.textContent = label;
+      name.title = theme;
+
+      const input = document.createElement('input');
+      input.type = 'color';
+      const current = getThemeColorOverride(theme);
+      input.value = hexToPickerValue(current || getThemeColor(theme));
+
+      const resetBtn = document.createElement('button');
+      resetBtn.className = 'settings-reset';
+      resetBtn.textContent = '↺';
+      resetBtn.title = 'Reset to default';
+      resetBtn.style.display = current ? '' : 'none';
+
+      input.addEventListener('input', () => {
+        setThemeColorOverride(theme, input.value);
+        resetBtn.style.display = '';
+        placement.recolorTheme(theme);
+      });
+
+      resetBtn.addEventListener('click', () => {
+        setThemeColorOverride(theme, null);
+        input.value = hexToPickerValue(getThemeColor(theme));
+        resetBtn.style.display = 'none';
+        placement.recolorTheme(theme);
+      });
+
+      row.appendChild(name);
+      row.appendChild(input);
+      row.appendChild(resetBtn);
+      menu.appendChild(row);
+    }
+  }
 
   btn.addEventListener('click', (e) => {
     e.preventDefault();
+    renderSettingsMenu();
     toggleMenu(menu);
-  });
-
-  const checkboxes = menu.querySelectorAll('input[type="checkbox"]');
-  checkboxes.forEach(cb => {
-    cb.addEventListener('change', () => {
-      const settings = {};
-      checkboxes.forEach(c => { settings[c.dataset.snap] = c.checked; });
-      setSnapSettings(settings);
-      clearScanCache();
-    });
   });
 }
 
@@ -364,11 +414,12 @@ function init() {
   if (!viewport) return;
 
   initOverrides();
+  initSettings();
   initUserTemplates();
   initSidebarResize();
   initBomResize();
 
-  const { scene, camera, renderer, controls, ground, requestRender } = initScene(viewport);
+  const { scene, camera, controls, ground, requestRender } = initScene(viewport);
 
   const placement = new PlacementSystem(scene, camera, controls, ground);
   placement.setRenderCallback(requestRender);
@@ -434,7 +485,7 @@ function init() {
 
   initTemplatesMenu(placement);
   initFileMenu(placement);
-  initSnapMenu();
+  initSettingsMenu(placement);
 
   const downloadAllBtn = document.getElementById('bom-download-all');
   if (downloadAllBtn) {

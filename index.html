@@ -63,17 +63,10 @@
         <button class="tool-btn" data-tool="place" title="Place (W)">Place</button>
         <button class="tool-btn" data-tool="delete" title="Delete (D)">Delete</button>
         <div class="toolbar-separator"></div>
+        <!-- Snap UI removed -->
         <div class="toolbar-dropdown">
-          <button class="tool-btn toolbar-menu-btn" id="snap-btn">Snap</button>
-          <div class="dropdown-menu" id="snap-menu">
-            <div class="snap-settings">
-              <label class="snap-toggle"><input type="checkbox" data-snap="grid" checked><span>Grid</span></label>
-              <label class="snap-toggle experimental"><input type="checkbox" data-snap="edge"><span>Edge</span> <small>(experimental)</small></label>
-              <label class="snap-toggle experimental"><input type="checkbox" data-snap="corner"><span>Corner</span> <small>(experimental)</small></label>
-              <label class="snap-toggle experimental"><input type="checkbox" data-snap="openlock"><span>OpenLock</span> <small>(experimental)</small></label>
-              <label class="snap-toggle experimental"><input type="checkbox" data-snap="magnetic"><span>Magnetic</span> <small>(experimental)</small></label>
-            </div>
-          </div>
+          <button class="tool-btn toolbar-menu-btn" id="settings-btn">Settings</button>
+          <div class="dropdown-menu settings-menu" id="settings-menu"></div>
         </div>
       </div>
       <div id="info-bar">

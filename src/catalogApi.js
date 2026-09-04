@@ -1,7 +1,23 @@
-import { generateModelId } from './modelCatalog.js';
+import { generateModelId, resolveTextureColor } from './modelCatalog.js';
 
 const API_BASE = '/catalog-api';
-const OBJECTS_BASE = '/catalog-objects';
+
+// fetch() with a hard timeout: hung requests (stalled proxy, dead CDN)
+// reject instead of hanging the UI forever.
+export async function fetchWithTimeout(url, options = {}, timeoutMs = 30000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } catch (e) {
+    if (e?.name === 'AbortError') {
+      throw new Error(`Request timed out after ${timeoutMs}ms: ${url}`, { cause: e });
+    }
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 const CATALOG_THEMES = {
   'dungeon_stone': { color: 0x8a8a98, label: 'Dungeon Stone' },
@@ -15,11 +31,8 @@ const CATALOG_THEMES = {
   'rough_stone': { color: 0x7b7b6b, label: 'Rough Stone' },
   'streets': { color: 0x8a7a6a, label: 'Streets' },
   'shingles': { color: 0xb05a3c, label: 'Shingles' },
-};
-
-const CATALOG_VERSION_COLORS = {
+  // Treat version names as normal themes by including them here.
   'stucco': { color: 0xd4c4a8, label: 'Stucco' },
-  'wood': { color: 0x8b6b4b, label: 'Wood' },
   'bricks_sidewalk': { color: 0xb05a3c, label: 'Bricks Sidewalk' },
 };
 
@@ -53,7 +66,7 @@ function getCatalogThemeInfo(theme) {
   if (CATALOG_THEMES[normalized]) return CATALOG_THEMES[normalized];
   const { set, version } = parseThemeParts(theme);
   if (CATALOG_THEMES[set] && set === 'shingles') return CATALOG_THEMES[set];
-  if (version && CATALOG_VERSION_COLORS[version]) return CATALOG_VERSION_COLORS[version];
+  if (version && CATALOG_THEMES[version]) return CATALOG_THEMES[version];
   if (CATALOG_THEMES[set]) return CATALOG_THEMES[set];
   const label = theme.replace(/[+_%-]/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
   return { color: hashStringToColor(theme), label };
@@ -83,16 +96,27 @@ export function parseCatalogTags(tags, blueprint) {
   if (tagSet.has('shape|corner')) typeTags.push('corner');
   if (tagSet.has('component|secret_door')) typeTags.push('secret_door');
 
-  let theme = 'plain';
+  let theme;
   let versionTheme = null;
   const textureSets = [];
+  const textureTags = [];
   for (const tag of tags) {
     if (tag.startsWith('texture|')) {
       const parts = tag.split('|');
       if (parts.length === 3) {
         versionTheme = parts[1] + '%' + parts[2];
+        textureTags.push({ name: parts[2], isVersion: true, tag });
+        if (!textureSets.includes(parts[1])) {
+          textureSets.push(parts[1]);
+        }
+        if (!textureTags.some(t => t.name === parts[1] && !t.isVersion)) {
+          textureTags.push({ name: parts[1], isVersion: false, tag: `texture|${parts[1]}` });
+        }
       } else if (parts.length === 2 && parts[1] !== 'plain' && !textureSets.includes(parts[1])) {
         textureSets.push(parts[1]);
+        if (!textureTags.some(t => t.name === parts[1])) {
+          textureTags.push({ name: parts[1], isVersion: false, tag });
+        }
       }
     }
   }
@@ -164,10 +188,11 @@ export function parseCatalogTags(tags, blueprint) {
   const fileName = blueprint?.file_name || blueprint?.blueprint_name || '';
 
   return {
-    _id: generateModelId(fileName),
+    _id: generateModelId(fileName, blueprint?.file_md5 || null),
     theme,
+    textureTags,
     themeLabel: themeInfo.label,
-    color: themeInfo.color,
+    color: resolveTextureColor(textureTags, theme),
     typeTags,
     primaryType,
     size,
@@ -201,11 +226,11 @@ export async function searchBlueprints({ require = [], deny = [], limit = 50, ne
   if (deny.length > 0) body.deny = deny.map(t => ({ tag: t }));
 
   const url = `${API_BASE}/blueprints/tags?${params.toString()}`;
-  const resp = await fetch(url, {
+  const resp = await fetchWithTimeout(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
-  });
+  }, 30000);
 
   if (!resp.ok) throw new Error(`Catalog API error: ${resp.status}`);
   const data = await resp.json();
@@ -223,11 +248,11 @@ export async function searchBlueprints({ require = [], deny = [], limit = 50, ne
 }
 
 export async function fetchTagTree() {
-  const resp = await fetch(`${API_BASE}/blueprints/tags?models=true&blueprints=true`, {
+  const resp = await fetchWithTimeout(`${API_BASE}/blueprints/tags?models=true&blueprints=true`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ require: [], deny: [] }),
-  });
+  }, 30000);
 
   if (!resp.ok) throw new Error(`Catalog API error: ${resp.status}`);
   const data = await resp.json();
@@ -244,7 +269,7 @@ export async function downloadBlueprintSTL(blueprint, onProgress) {
     fetchUrl = '/catalog-objects' + url.replace('https://objects.openforge.tools', '');
   }
 
-  const resp = await fetch(fetchUrl);
+  const resp = await fetchWithTimeout(fetchUrl, {}, 120000);
   if (!resp.ok) throw new Error(`Failed to download STL: ${resp.status}`);
 
   const contentLength = parseInt(resp.headers.get('content-length') || '0');

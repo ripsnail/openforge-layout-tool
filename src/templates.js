@@ -1,4 +1,3 @@
-import * as THREE from 'three';
 import { loadModelGeometry, createMesh } from './modelLoader.js';
 import { parseModelFilename } from './modelCatalog.js';
 import { getManifest } from './downloadedModels.js';

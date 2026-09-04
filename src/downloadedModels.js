@@ -1,5 +1,6 @@
-import { parseCatalogTags, blueprintToModelInfo } from './catalogApi.js';
+import { blueprintToModelInfo, fetchWithTimeout } from './catalogApi.js';
 import { generateModelId, registerModelId } from './modelCatalog.js';
+// scanner removed — no-op invalidation logic eliminated
 
 const STORAGE_KEY = 'openforge-downloaded-models';
 
@@ -49,13 +50,13 @@ async function cacheThumbnail(safeName, thumbnailUrl) {
     if (url.startsWith('https://objects.openforge.tools/')) {
       url = '/catalog-objects' + url.replace('https://objects.openforge.tools', '');
     }
-    const resp = await fetch(url);
+    const resp = await fetchWithTimeout(url, {}, 30000);
     if (!resp.ok) return false;
     const buf = await resp.arrayBuffer();
-    const postResp = await fetch(`/downloaded/thumbs/${safeName}.png`, {
+    const postResp = await fetchWithTimeout(`/downloaded/thumbs/${safeName}.png`, {
       method: 'POST',
       body: new Uint8Array(buf),
-    });
+    }, 30000);
     return postResp.ok;
   } catch (e) { return false; }
 }
@@ -82,7 +83,7 @@ export function ensureCatalogThumbCached(imageUrl) {
   catalogThumbSeen.add(key);
   (async () => {
     try {
-      const head = await fetch(local, { method: 'HEAD' });
+      const head = await fetchWithTimeout(local, { method: 'HEAD' }, 15000);
       if (head.ok) return;
     } catch (e) { /* fall through to cache it */ }
     try {
@@ -90,10 +91,10 @@ export function ensureCatalogThumbCached(imageUrl) {
       if (url.startsWith('https://objects.openforge.tools/')) {
         url = '/catalog-objects' + url.replace('https://objects.openforge.tools', '');
       }
-      const resp = await fetch(url);
+      const resp = await fetchWithTimeout(url, {}, 30000);
       if (!resp.ok) return;
       const buf = await resp.arrayBuffer();
-      await fetch(local, { method: 'POST', body: new Uint8Array(buf) });
+      await fetchWithTimeout(local, { method: 'POST', body: new Uint8Array(buf) }, 30000);
     } catch (e) { /* best effort */ }
   })();
   return local;
@@ -131,7 +132,7 @@ export function initDownloadedModels() {
         if (name.startsWith('aztlan') || name.startsWith('arch')) {
           const cached = downloadCache.get(m._id);
           if (cached) {
-            URL.revokeObjectURL(cached.blobUrl);
+            if (cached.blobUrl) URL.revokeObjectURL(cached.blobUrl);
             downloadCache.delete(m._id);
           }
           dropped++;
@@ -146,11 +147,11 @@ export function initDownloadedModels() {
       }
       localStorage.setItem('openforge-manifest-purge-1', '1');
     }
-  } catch (e) {}
+  } catch (e) {/* ignore localStorage errors */}
 
   let migrated = false;
   for (const entry of manifest) {
-    if (!entry._id) entry._id = generateModelId(entry.fileName);
+    if (!entry._id) entry._id = generateModelId(entry.fileName, entry.sha || entry.modelInfo?.sha);
     if (entry.modelInfo && !entry.modelInfo._id) entry.modelInfo._id = entry._id;
     if (!entry.safeName) {
       entry.safeName = safeEncode(entry._id);
@@ -164,14 +165,14 @@ export function initDownloadedModels() {
       });
     } else if (entry.hasThumb) {
       const tn = thumbNameForEntry(entry);
-      fetch(thumbPath(tn), { method: 'HEAD' }).then(r => {
+      fetchWithTimeout(thumbPath(tn), { method: 'HEAD' }, 15000).then(r => {
         if (r.ok) return;
         const oldTn = safeEncode(entry.fileName);
         if (oldTn === tn) { entry.hasThumb = false; return; }
-        fetch(thumbPath(oldTn)).then(r2 => {
+        fetchWithTimeout(thumbPath(oldTn), {}, 15000).then(r2 => {
           if (!r2.ok) { entry.hasThumb = false; return; }
           r2.arrayBuffer().then(buf => {
-            fetch(thumbPath(tn), { method: 'POST', body: new Uint8Array(buf) }).then(r3 => {
+            fetchWithTimeout(thumbPath(tn), { method: 'POST', body: new Uint8Array(buf) }, 30000).then(r3 => {
               if (!r3.ok) { entry.hasThumb = false; }
             }).catch(() => { entry.hasThumb = false; });
           });
@@ -201,29 +202,38 @@ function extractMd5FromUrl(url) {
   return m ? m[1] : null;
 }
 
-function saveManifest() {
+let manifestQuotaWarned = false;
+
+export function saveManifest() {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(manifest));
   } catch (e) {
-    console.warn('Failed to save downloaded models manifest');
+    if (!manifestQuotaWarned) {
+      manifestQuotaWarned = true;
+      console.warn(
+        'Failed to save downloaded-models manifest — browser storage is full. ' +
+        'Imported-model bookkeeping may be lost on refresh.',
+        e
+      );
+    }
   }
 }
 
 export function syncMetadataToServer(modelInfo) {
   const sha = modelInfo?.sha;
   if (!sha) return;
-  fetch(`/metadata/${sha}`, {
+  fetchWithTimeout(`/metadata/${sha}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(modelInfo),
-  }).catch(() => {});
+  }, 15000).catch(() => {});
 }
 
 export async function hydrateMetadataFromServer() {
   const empty = { added: [], pruned: [] };
-  let items = [];
+  let items;
   try {
-    const resp = await fetch('/metadata');
+    const resp = await fetchWithTimeout('/metadata', {}, 30000);
     if (!resp.ok) return empty;
     items = await resp.json();
   } catch (e) {
@@ -239,7 +249,10 @@ export async function hydrateMetadataFromServer() {
   for (const m of manifest) {
     const sha = m.sha || m.modelInfo?.sha;
     const row = sha ? serverRows.get(sha) : null;
-    if (sha && healthyDb && (!row || row.stl_cached !== true)) {
+    // Prune only on explicit server state (row exists, STL known uncached).
+    // A missing row means unknown state (e.g. server DB was reset) — keep
+    // the local entry so saved models and layouts keep resolving.
+    if (sha && healthyDb && row && row.stl_cached !== true) {
       pruned.push(m._id);
     } else {
       kept.push(m);
@@ -250,7 +263,7 @@ export async function hydrateMetadataFromServer() {
     for (const _id of pruned) {
       const cached = downloadCache.get(_id);
       if (cached) {
-        URL.revokeObjectURL(cached.blobUrl);
+        if (cached.blobUrl) URL.revokeObjectURL(cached.blobUrl);
         downloadCache.delete(_id);
       }
     }
@@ -293,36 +306,42 @@ export async function importBlueprint(blueprint, stlArrayBuffer) {
   const fileName = blueprint.file_name || blueprint.blueprint_name;
   if (!fileName) throw new Error('Blueprint has no filename');
 
-  const blob = new Blob([stlArrayBuffer], { type: 'model/stl' });
-  const blobUrl = URL.createObjectURL(blob);
-
   const modelInfo = blueprint.modelInfo || blueprintToModelInfo(blueprint);
+  const sha = blueprint.file_md5 || modelInfo.sha || null;
 
   const entry = {
     _id: modelInfo._id,
     fileName,
     safeName: safeEncode(modelInfo._id),
-    sha: blueprint.file_md5 || modelInfo.sha || null,
-    stlName: stlName(blueprint.file_md5 || modelInfo.sha) || safeEncode(modelInfo._id),
+    sha,
+    stlName: stlName(sha) || safeEncode(modelInfo._id),
     catalogId: blueprint.id,
     storageUrl: blueprint.storage_address || null,
     modelInfo,
     importedAt: Date.now(),
   };
 
-  downloadCache.set(entry._id, { blobUrl, arrayBuffer: stlArrayBuffer });
+  downloadCache.set(entry._id, { cachedAt: Date.now() });
 
   try {
-    const resp = await fetch(`/downloaded/${entry.stlName}`, {
+    const resp = await fetchWithTimeout(`/downloaded/${entry.stlName}`, {
       method: 'POST',
       body: new Uint8Array(stlArrayBuffer),
-    });
+    }, 120000);
     if (resp.ok) entry.savedToDisk = true;
   } catch (e) {
     console.warn('Failed to save STL to disk:', e);
   }
 
-  const existing = manifest.findIndex(m => m._id === entry._id);
+  // Dedup by identity (content sha) or filename: re-importing replaces the
+  // old entry instead of minting a second identity for the same model.
+  // Layout tiles referencing a superseded _id still resolve via the
+  // fileName fallback in _loadFromData / resolveTemplateTiles.
+  const existing = manifest.findIndex(m =>
+    m._id === entry._id ||
+    (sha && (m.sha === sha || m.modelInfo?.sha === sha)) ||
+    (fileName && m.fileName === fileName)
+  );
   if (existing >= 0) {
     manifest[existing] = entry;
   } else {
@@ -330,6 +349,7 @@ export async function importBlueprint(blueprint, stlArrayBuffer) {
     registerModelId(entry._id);
   }
 
+  // scan cache invalidation removed
   saveManifest();
   if (entry.sha) syncMetadataToServer({ ...modelInfo, sha: entry.sha });
   console.log('[catalog] imported', fileName, entry.sha || '');
@@ -354,9 +374,10 @@ export function removeDownloaded(_id) {
   const entry = manifest.find(m => m._id === _id);
   const fileName = entry?.fileName;
   const sha = entry?.sha;
+  // scan cache invalidation removed
   const cached = downloadCache.get(_id);
   if (cached) {
-    URL.revokeObjectURL(cached.blobUrl);
+    if (cached.blobUrl) URL.revokeObjectURL(cached.blobUrl);
     downloadCache.delete(_id);
   }
   if (fileName) {
@@ -366,7 +387,7 @@ export function removeDownloaded(_id) {
   }
   saveManifest();
   if (sha) {
-    fetch(`/metadata/${sha}`, { method: 'DELETE' }).catch(() => {});
+    fetchWithTimeout(`/metadata/${sha}`, { method: 'DELETE' }, 15000).catch(() => {});
   }
 }
 
@@ -374,11 +395,35 @@ export function getManifest() {
   return [...manifest];
 }
 
+export function addDownloadedModelEntry(modelInfo) {
+  if (!modelInfo || !modelInfo.fileName) return null;
+  const existing = manifest.find(m => m.fileName === modelInfo.fileName || m._id === modelInfo._id);
+  if (existing) return existing;
+
+  const _id = modelInfo._id || generateModelId(modelInfo.fileName, modelInfo.sha || modelInfo.modelInfo?.sha);
+  const entry = {
+    _id,
+    fileName: modelInfo.fileName,
+    safeName: safeEncode(_id),
+    sha: modelInfo.sha || null,
+    stlName: stlName(modelInfo.sha) || safeEncode(_id),
+    storageUrl: modelInfo.storageUrl || null,
+    catalogId: modelInfo.catalogId || null,
+    modelInfo: { ...modelInfo, _id, source: 'downloaded' },
+    savedToDisk: false,
+    importedAt: Date.now(),
+  };
+  manifest.push(entry);
+  registerModelId(_id);
+  saveManifest();
+  return entry;
+}
+
 export function ensureCached(_id, modelInfo, buffer) {
   if (downloadCache.has(_id)) return;
-  const blob = new Blob([buffer], { type: 'model/stl' });
-  const blobUrl = URL.createObjectURL(blob);
-  downloadCache.set(_id, { blobUrl, arrayBuffer: buffer });
+  // Marker only — see note in importBlueprint. `buffer` is intentionally
+  // not retained (it is already persisted to disk / IndexedDB by callers).
+  downloadCache.set(_id, { cachedAt: Date.now() });
 
   const fileName = modelInfo.fileName || _id;
   const safeName = safeEncode(_id);
@@ -415,8 +460,8 @@ export function ensureCached(_id, modelInfo, buffer) {
   saveManifest();
   if (entry.modelInfo?.sha) syncMetadataToServer(entry.modelInfo);
 
-  fetch(`/downloaded/${entry.stlName || entry.safeName}`, {
+  fetchWithTimeout(`/downloaded/${entry.stlName || entry.safeName}`, {
     method: 'POST',
     body: new Uint8Array(buffer),
-  }).catch(() => {});
+  }, 120000).catch(() => {});
 }

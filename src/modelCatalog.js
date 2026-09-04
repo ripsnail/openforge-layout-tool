@@ -3,18 +3,46 @@ import { getOverride, applyOverride } from './modelOverrides.js';
 let _nextModelId = 1;
 const _usedIds = new Set();
 
+// Filename -> texture name overrides. Edit this map to add more
+// special-case texture defaults without changing code logic.
+const FILENAME_TEXTURE_OVERRIDES = {
+  'towne#floor+wall+s2w.2x2.openforge.stl': 'wood',
+};
+
+export function applyFilenameTextureOverrides(modelInfo) {
+  if (!modelInfo || !modelInfo.fileName) return modelInfo;
+  const tex = FILENAME_TEXTURE_OVERRIDES[modelInfo.fileName];
+  if (!tex) return modelInfo;
+  modelInfo.textureTags = setTextureOverride(modelInfo.textureTags, tex);
+  return modelInfo;
+}
+
 export function registerModelId(id) {
   _usedIds.add(id);
 }
 
-export function generateModelId(baseName) {
-  if (!_usedIds.has(baseName)) {
-    _usedIds.add(baseName);
-    return baseName;
+// Generate a stable model id. If a content `sha` is provided, prefer a
+// content-derived id to avoid filename-based collisions across re-imports.
+export function generateModelId(baseName, sha) {
+  const name = String(baseName || 'model');
+  if (sha) {
+    const short = String(sha).slice(0, 8);
+    let id = `${name}#${short}`;
+    if (!_usedIds.has(id)) { _usedIds.add(id); return id; }
+    let i = 2;
+    while (_usedIds.has(id + '_' + i)) i++;
+    id = id + '_' + i;
+    _usedIds.add(id);
+    return id;
+  }
+
+  if (!_usedIds.has(name)) {
+    _usedIds.add(name);
+    return name;
   }
   let i = 2;
-  while (_usedIds.has(baseName + '_' + i)) i++;
-  const id = baseName + '_' + i;
+  while (_usedIds.has(name + '_' + i)) i++;
+  const id = name + '_' + i;
   _usedIds.add(id);
   return id;
 }
@@ -31,11 +59,8 @@ const THEME_COLORS = {
   'aztlan': 0x8a7a5a,
   'streets': 0x8a7a6a,
   'shingles': 0xb05a3c,
-};
-
-const VERSION_COLORS = {
+  // Merge version colors here so versions are treated like normal themes.
   'stucco': 0xd4c4a8,
-  'wood': 0x8b6b4b,
   'bricks_sidewalk': 0xb05a3c,
 };
 
@@ -52,7 +77,7 @@ function parseThemeParts(theme) {
   return { set: theme, version: null };
 }
 
-const THEME_LABELS = {
+export const THEME_LABELS = {
   'dungeon_stone': 'Dungeon Stone',
   'rough_stone': 'Rough Stone',
   'cut-stone': 'Cut Stone',
@@ -115,7 +140,8 @@ export function getThemeColor(theme) {
   if (THEME_COLORS[normalized]) return THEME_COLORS[normalized];
   const { set, version } = parseThemeParts(theme);
   if (THEME_COLORS[set] && set === 'shingles') return THEME_COLORS[set];
-  if (version && VERSION_COLORS[version]) return VERSION_COLORS[version];
+  // Treat version suffixes like normal themes by checking THEME_COLORS
+  if (version && THEME_COLORS[version]) return THEME_COLORS[version];
   if (THEME_COLORS[set]) return THEME_COLORS[set];
   if (normalized.includes('_')) {
     const fallback = normalized.split('_')[0];
@@ -123,6 +149,133 @@ export function getThemeColor(theme) {
   }
   return hashStringToColor(theme);
 }
+
+const TEXTURE_PRIORITY = [
+  'shingles', 'bricks_sidewalk', 'stucco', 'marble', 'cobblestone',
+  'cut-stone', 'rough_stone', 'dungeon_stone', 'smooth_stone',
+  'wood', 'sewer', 'cave', 'aztlan', 'streets', 'towne', 'plain',
+];
+
+function textureColorFor(name, isVersion) {
+  if (name === undefined || name === null) return null;
+  if (isVersion) {
+    // Versions are treated as normal themes; look up in THEME_COLORS.
+    if (THEME_COLORS[name] !== undefined) return THEME_COLORS[name];
+    return null;
+  }
+  if (THEME_COLORS[name] !== undefined) return THEME_COLORS[name];
+  return null;
+}
+
+function pickTexture(list, isVersion) {
+  if (!list || list.length === 0) return null;
+  for (const p of TEXTURE_PRIORITY) {
+    if (list.includes(p)) return p;
+  }
+  for (const name of list) {
+    if (textureColorFor(name, isVersion) !== null) return name;
+  }
+  return null;
+}
+
+export function deriveTextureTags(rawTags) {
+  const tags = Array.isArray(rawTags) ? rawTags : [];
+  const result = [];
+  for (const tag of tags) {
+    if (typeof tag !== 'string' || !tag.startsWith('texture|')) continue;
+    const parts = tag.split('|');
+    if (parts.length === 3) {
+      result.push({ name: parts[2], isVersion: true, tag });
+      if (!result.some(t => t.name === parts[1] && !t.isVersion)) {
+        result.push({ name: parts[1], isVersion: false, tag: `texture|${parts[1]}` });
+      }
+    } else if (parts.length === 2 && parts[1] !== 'plain') {
+      if (!result.some(t => t.name === parts[1])) {
+        result.push({ name: parts[1], isVersion: false, tag });
+      }
+    }
+  }
+  return result;
+}
+
+export function getEffectiveTextureTags(modelInfo) {
+  if (modelInfo?.textureTags && modelInfo.textureTags.length > 0) return modelInfo.textureTags;
+  const derived = deriveTextureTags(modelInfo?.tags);
+  return derived.length > 0 ? derived : null;
+}
+
+export function resolveTextureColor(textureTags, theme) {
+  if (textureTags && textureTags.length > 0) {
+    const override = textureTags.find(t => t.override);
+    if (override) {
+      const c = textureColorFor(override.name, override.isVersion);
+      if (c !== null) return c;
+    }
+
+    const versions = textureTags.filter(t => t.isVersion && !t.override);
+    const sets = textureTags.filter(t => !t.isVersion && !t.override);
+
+    const versionPick = pickTexture(versions.map(t => t.name), true);
+    if (versionPick) {
+      const c = textureColorFor(versionPick, true);
+      if (c !== null) return c;
+    }
+
+    const setPick = pickTexture(sets.map(t => t.name), false);
+    if (setPick) {
+      const c = textureColorFor(setPick, false);
+      if (c !== null) return c;
+    }
+  }
+  return getThemeColor(theme);
+}
+
+export function getTextureOverride(textureTags) {
+  if (!textureTags) return null;
+  const tag = textureTags.find(t => t.override);
+  return tag ? tag.name : null;
+}
+
+export function setTextureOverride(textureTags, name) {
+  if (!Array.isArray(textureTags)) return [{ name, isVersion: false, override: true, tag: `texture|${name}` }];
+  const rest = textureTags.filter(t => !t.override);
+  if (!name) return rest;
+  return [{ name, isVersion: false, override: true, tag: `texture|${name}` }, ...rest];
+}
+
+export function formatTextureTag(t) {
+  if (!t) return '';
+  const full = t.tag || `texture|${t.name}`;
+  const encodesVersion = full.split('|').length === 3;
+  const versionMark = t.isVersion && !encodesVersion ? ' (version)' : '';
+  return full + versionMark + (t.override ? ' (override)' : '');
+}
+
+// Escapes a string for interpolation into HTML text or double-quoted
+// attribute values. Use for anything originating outside this codebase:
+// catalog tag strings (remote API), filenames, and user-entered overrides.
+export function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+export const TEXTURE_OPTIONS = [
+  { name: 'dungeon_stone', label: 'Dungeon Stone' },
+  { name: 'rough_stone', label: 'Rough Stone' },
+  { name: 'cut-stone', label: 'Cut Stone' },
+  { name: 'towne', label: 'Towne' },
+  { name: 'wood', label: 'Wood' },
+  { name: 'plain', label: 'Plain' },
+  { name: 'sewer', label: 'Sewer' },
+  { name: 'cave', label: 'Cave' },
+  { name: 'aztlan', label: 'Aztlan' },
+  { name: 'streets', label: 'Streets' },
+  { name: 'shingles', label: 'Shingles' },
+];
 
 export function getThemeLabel(theme) {
   return THEME_LABELS[theme] || theme.replace(/[+_%-]/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
@@ -214,9 +367,16 @@ export function parseModelFilename(filename) {
     displayName: typeTags.join('+').replace(/_/g, ' '),
     connCaps,
     source: 'local',
+    // Filename theme prefixes like "shingles,stucco" carry the texture sets.
+    // Capture them so menus and the colour tracker work even when no raw
+    // catalog tags are available (e.g. layout-restore fallback).
+    textureTags: theme.split(/[,+]/).map(s => s.trim()).filter(s => s && s !== 'plain').map(name => ({ name, isVersion: false, tag: `texture|${name}` })),
   };
 
   modelInfo = applyOverride(modelInfo);
+
+  // Apply any filename-based texture overrides from the map.
+  applyFilenameTextureOverrides(modelInfo);
 
   return modelInfo;
 }
@@ -294,10 +454,6 @@ export function hasSide(modelInfo) {
 const PRIMARY_TYPE_OVERRIDES = {
   'dungeon_stone#magnetic.A.openforge.stl': 'wall',
 };
-
-export function resolveTagColor(theme, typeTags) {
-  return null;
-}
 
 const MODEL_FOOTPRINTS = {
   'dungeon_stone#base+wall.A.openlock+topless,magnetic+flex.stl': { w: 50.8, d: 12.7 },

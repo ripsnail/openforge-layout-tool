@@ -1,4 +1,4 @@
-import { getTypeIcon } from './modelCatalog.js';
+import { getTypeIcon, getEffectiveTextureTags, formatTextureTag, escapeHtml } from './modelCatalog.js';
 import { searchBlueprints, downloadBlueprintSTL } from './catalogApi.js';
 import { initDownloadedModels, importBlueprint, isDownloaded, removeDownloaded, getDownloadedModels, getThumbnailUrl, hydrateMetadataFromServer, ensureCatalogThumbCached } from './downloadedModels.js';
 import { getOverride, hasOverride, setOverride, removeOverride, buildOverrideFromUI } from './modelOverrides.js';
@@ -15,6 +15,11 @@ const TAG_CATEGORIES = [
 
 function formatModelName(model) {
   return (model.fileName || '').replace(/\.stl$/i, '');
+}
+
+function textureTagsSubtitle(model) {
+  const tags = getEffectiveTextureTags(model) || [];
+  return tags.map(formatTextureTag).join(' · ');
 }
 
 function readURLState() {
@@ -117,6 +122,7 @@ export function initPalette(onSelectModel) {
   let catalogTagCounts = {};
   let localTagCounts = {};
   let isLoadingCatalog = false;
+  let catalogRequestId = 0;
   let catalogPaging = { total_count: 0 };
   let nextToken = null;
   let activeTab = 'saved';
@@ -370,8 +376,11 @@ export function initPalette(onSelectModel) {
         if (deniedTags.includes(tag)) tagBtn.classList.add('denied');
         tagBtn.style.paddingLeft = `${depth * 8 + 4}px`;
 
-        const shortName = tag.split('|').pop().replace(/_/g, ' ');
-        tagBtn.innerHTML = `${shortName} <span class="tag-count">${count}</span>`;
+        // Category header already shows the first segment (e.g. "texture"),
+        // so buttons show the remainder: towne|broken_stucco-a.
+        const tagRemainder = tag.split('|').slice(1).join('|');
+        tagBtn.innerHTML = `${escapeHtml(tagRemainder)} <span class="tag-count">${count}</span>`;
+        tagBtn.title = tag;
 
         tagBtn.addEventListener('click', (e) => {
           if (e.shiftKey) {
@@ -407,7 +416,7 @@ export function initPalette(onSelectModel) {
     for (const tag of selectedTags) {
       const chip = document.createElement('span');
       chip.className = 'filter-chip require';
-      chip.textContent = tag.split('|').pop();
+      chip.textContent = tag;
       chip.title = `Required: ${tag}`;
       chip.addEventListener('click', () => {
         selectedTags = selectedTags.filter(t => t !== tag);
@@ -419,7 +428,7 @@ export function initPalette(onSelectModel) {
     for (const tag of deniedTags) {
       const chip = document.createElement('span');
       chip.className = 'filter-chip deny';
-      chip.textContent = '!' + tag.split('|').pop();
+      chip.textContent = '!' + tag;
       chip.title = `Denied: ${tag}`;
       chip.addEventListener('click', () => {
         deniedTags = deniedTags.filter(t => t !== tag);
@@ -432,6 +441,9 @@ export function initPalette(onSelectModel) {
   }
 
   async function loadCatalogResults(append = false) {
+    // Guard against overlapping searches: only the latest request may
+    // write results (a slow older response must not overwrite newer ones).
+    const requestId = ++catalogRequestId;
     isLoadingCatalog = true;
     render();
 
@@ -443,6 +455,8 @@ export function initPalette(onSelectModel) {
         nextToken: append ? nextToken : null,
       });
 
+      if (requestId !== catalogRequestId) return;
+
       if (append) {
         catalogResults = [...catalogResults, ...result.blueprints];
       } else {
@@ -453,10 +467,12 @@ export function initPalette(onSelectModel) {
       catalogPaging = result.paging;
       nextToken = result.paging.next_token || null;
     } catch (e) {
+      if (requestId !== catalogRequestId) return;
       console.error('Catalog search failed:', e);
       if (!append) catalogResults = [];
     }
 
+    if (requestId !== catalogRequestId) return;
     isLoadingCatalog = false;
     render();
   }
@@ -476,9 +492,6 @@ export function initPalette(onSelectModel) {
     const remoteSavedThumb = model.thumbnailUrl || null;
     const savedThumbUrl = getThumbnailUrl(model._id) || (remoteSavedThumb ? ensureCatalogThumbCached(remoteSavedThumb) : null);
     const thumbUrl = savedThumbUrl || remoteSavedThumb;
-    const thumbnail = thumbUrl
-      ? `<img class="model-thumb" src="${thumbUrl}" alt="" loading="lazy" />`
-      : `<span class="model-preview">${icon}</span>`;
 
     const thumbEl = document.createElement('div');
     thumbEl.className = 'model-thumb-wrap';
@@ -527,8 +540,9 @@ export function initPalette(onSelectModel) {
       });
     }
 
+    const tagsSubtitle = textureTagsSubtitle(model);
     item.innerHTML = `
-      <span class="model-name">${formatModelName(model)}${overrideIndicator}</span>
+      <span class="model-text"><span class="model-name">${escapeHtml(formatModelName(model))}${overrideIndicator}</span>${tagsSubtitle ? `<span class="model-tags">${escapeHtml(tagsSubtitle)}</span>` : ''}</span>
     `;
 
     item.addEventListener('click', (e) => {
@@ -636,8 +650,9 @@ export function initPalette(onSelectModel) {
       thumbEl.appendChild(span);
     }
 
+    const catTagsSubtitle = textureTagsSubtitle(modelInfo);
     item.innerHTML = `
-      <span class="model-name">${formatModelName(modelInfo)}</span>
+      <span class="model-text"><span class="model-name">${escapeHtml(formatModelName(modelInfo))}</span>${catTagsSubtitle ? `<span class="model-tags">${escapeHtml(catTagsSubtitle)}</span>` : ''}</span>
     `;
 
     const actions = document.createElement('div');
@@ -700,7 +715,7 @@ export function initPalette(onSelectModel) {
     const header = document.createElement('div');
     header.className = 'override-header';
     header.innerHTML = `
-      <span>Override: ${formatModelName(model)}</span>
+      <span>Override: ${escapeHtml(formatModelName(model))}</span>
       <button class="override-close">×</button>
     `;
     header.querySelector('.override-close').addEventListener('click', () => {
@@ -732,11 +747,11 @@ export function initPalette(onSelectModel) {
     sizeFields.innerHTML = `
       <div class="override-field">
         <label>Width (tiles)</label>
-        <input type="number" id="ov-sizeX" min="0.5" max="8" step="0.5" value="${existing.size?.x || model.size?.x || ''}" />
+        <input type="number" id="ov-sizeX" min="0.5" max="8" step="0.5" value="${escapeHtml(existing.size?.x || model.size?.x || '')}" />
       </div>
       <div class="override-field">
         <label>Depth (tiles)</label>
-        <input type="number" id="ov-sizeY" min="0.5" max="8" step="0.5" value="${existing.size?.y || model.size?.y || ''}" />
+        <input type="number" id="ov-sizeY" min="0.5" max="8" step="0.5" value="${escapeHtml(existing.size?.y || model.size?.y || '')}" />
       </div>
     `;
     form.appendChild(sizeFields);
@@ -745,7 +760,7 @@ export function initPalette(onSelectModel) {
     formatField.className = 'override-field';
     formatField.innerHTML = `
       <label>Connection Format</label>
-      <input type="text" id="ov-format" placeholder="e.g. openlock, openforge" value="${existing.format || model.format || ''}" />
+      <input type="text" id="ov-format" placeholder="e.g. openlock, openforge" value="${escapeHtml(existing.format || model.format || '')}" />
     `;
     form.appendChild(formatField);
 
@@ -753,7 +768,7 @@ export function initPalette(onSelectModel) {
     themeField.className = 'override-field';
     themeField.innerHTML = `
       <label>Theme Override</label>
-      <input type="text" id="ov-theme" placeholder="e.g. dungeon_stone" value="${existing.theme || model.theme || ''}" />
+      <input type="text" id="ov-theme" placeholder="e.g. dungeon_stone" value="${escapeHtml(existing.theme || model.theme || '')}" />
     `;
     form.appendChild(themeField);
 
@@ -761,7 +776,7 @@ export function initPalette(onSelectModel) {
     nameField.className = 'override-field';
     nameField.innerHTML = `
       <label>Display Name</label>
-      <input type="text" id="ov-displayName" placeholder="Custom name" value="${existing.displayName || ''}" />
+      <input type="text" id="ov-displayName" placeholder="Custom name" value="${escapeHtml(existing.displayName || '')}" />
     `;
     form.appendChild(nameField);
 
@@ -775,11 +790,11 @@ export function initPalette(onSelectModel) {
     fpFields.innerHTML = `
       <div class="override-field">
         <label>Width (mm)</label>
-        <input type="number" id="ov-fpW" min="1" max="200" step="0.1" value="${existing.customFootprint?.w || ''}" placeholder="Auto" />
+        <input type="number" id="ov-fpW" min="1" max="200" step="0.1" value="${escapeHtml(existing.customFootprint?.w || '')}" placeholder="Auto" />
       </div>
       <div class="override-field">
         <label>Depth (mm)</label>
-        <input type="number" id="ov-fpD" min="1" max="200" step="0.1" value="${existing.customFootprint?.d || ''}" placeholder="Auto" />
+        <input type="number" id="ov-fpD" min="1" max="200" step="0.1" value="${escapeHtml(existing.customFootprint?.d || '')}" placeholder="Auto" />
       </div>
     `;
     form.appendChild(fpFields);
@@ -805,13 +820,9 @@ export function initPalette(onSelectModel) {
         <input type="checkbox" id="ov-acceptsFloors" ${snap.acceptsFloors ? 'checked' : ''} />
         Accepts Floors (stackable)
       </label>
-      <label class="override-checkbox">
-        <input type="checkbox" id="ov-snapsToCorners" ${snap.snapsToCorners ? 'checked' : ''} />
-        Snaps to Corners
-      </label>
       <div class="override-field">
         <label>Custom Snap Radius (mm)</label>
-        <input type="number" id="ov-snapRadius" min="0" max="500" step="1" value="${snap.customSnapRadius || ''}" placeholder="Default (127)" />
+        <input type="number" id="ov-snapRadius" min="0" max="500" step="1" value="${escapeHtml(snap.customSnapRadius || '')}" placeholder="Default (127)" />
       </div>
     `;
     form.appendChild(snapFields);
@@ -835,7 +846,6 @@ export function initPalette(onSelectModel) {
         isBase: document.getElementById('ov-isBase').checked,
         acceptsWalls: document.getElementById('ov-acceptsWalls').checked,
         acceptsFloors: document.getElementById('ov-acceptsFloors').checked,
-        snapsToCorners: document.getElementById('ov-snapsToCorners').checked,
         customSnapRadius: document.getElementById('ov-snapRadius').value,
       };
 
