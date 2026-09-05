@@ -5,17 +5,25 @@ const API_BASE = '/catalog-api';
 // fetch() with a hard timeout: hung requests (stalled proxy, dead CDN)
 // reject instead of hanging the UI forever.
 export async function fetchWithTimeout(url, options = {}, timeoutMs = 30000) {
+  const { signal: externalSignal, ...restOptions } = options;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const onExternalAbort = () => controller.abort();
+  if (externalSignal) {
+    if (externalSignal.aborted) controller.abort();
+    else externalSignal.addEventListener('abort', onExternalAbort);
+  }
   try {
-    return await fetch(url, { ...options, signal: controller.signal });
+    return await fetch(url, { ...restOptions, signal: controller.signal });
   } catch (e) {
     if (e?.name === 'AbortError') {
+      if (externalSignal?.aborted) throw e;
       throw new Error(`Request timed out after ${timeoutMs}ms: ${url}`, { cause: e });
     }
     throw e;
   } finally {
     clearTimeout(timer);
+    if (externalSignal) externalSignal.removeEventListener('abort', onExternalAbort);
   }
 }
 
@@ -162,7 +170,7 @@ export function blueprintToModelInfo(blueprint) {
   return parseCatalogTags(blueprint.tags || [], blueprint);
 }
 
-export async function searchBlueprints({ require = [], deny = [], limit = 50, nextToken = null, prevToken = null } = {}) {
+export async function searchBlueprints({ require = [], deny = [], limit = 50, nextToken = null, prevToken = null, signal = null } = {}) {
   const params = new URLSearchParams();
   params.set('models', 'true');
   params.set('blueprints', 'true');
@@ -179,6 +187,7 @@ export async function searchBlueprints({ require = [], deny = [], limit = 50, ne
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
+    signal,
   }, 30000);
 
   if (!resp.ok) throw new Error(`Catalog API error: ${resp.status}`);

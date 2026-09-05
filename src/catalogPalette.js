@@ -123,6 +123,7 @@ export function initPalette(onSelectModel) {
   let localTagCounts = {};
   let isLoadingCatalog = false;
   let catalogRequestId = 0;
+  let catalogAbortController = null;
   let catalogPaging = { total_count: 0 };
   let nextToken = null;
   let activeTab = 'saved';
@@ -443,6 +444,11 @@ export function initPalette(onSelectModel) {
   async function loadCatalogResults(append = false) {
     // Guard against overlapping searches: only the latest request may
     // write results (a slow older response must not overwrite newer ones).
+    // Also abort the previous in-flight request so it doesn't keep consuming
+    // bandwidth/API quota after it's no longer needed.
+    if (catalogAbortController) catalogAbortController.abort();
+    const controller = new AbortController();
+    catalogAbortController = controller;
     const requestId = ++catalogRequestId;
     isLoadingCatalog = true;
     render();
@@ -453,6 +459,7 @@ export function initPalette(onSelectModel) {
         deny: deniedTags,
         limit: 50,
         nextToken: append ? nextToken : null,
+        signal: controller.signal,
       });
 
       if (requestId !== catalogRequestId) return;
@@ -468,6 +475,7 @@ export function initPalette(onSelectModel) {
       nextToken = result.paging.next_token || null;
     } catch (e) {
       if (requestId !== catalogRequestId) return;
+      if (e?.name === 'AbortError') return;
       console.error('Catalog search failed:', e);
       if (!append) catalogResults = [];
     }

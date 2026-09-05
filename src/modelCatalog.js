@@ -2,6 +2,11 @@ import { getOverride } from './modelOverrides.js';
 
 let _nextModelId = 1;
 const _usedIds = new Set();
+// Memoizes ids generated from a content sha so that re-generating an id for
+// the same (baseName, sha) pair — e.g. re-rendering catalog search results
+// for a blueprint that hasn't been imported yet — returns the same id
+// instead of tacking on a new "_2", "_3", ... suffix every time.
+const _idByShaKey = new Map();
 
 export function registerModelId(id) {
   _usedIds.add(id);
@@ -13,12 +18,17 @@ export function generateModelId(baseName, sha) {
   const name = String(baseName || 'model');
   if (sha) {
     const short = String(sha).slice(0, 8);
-    let id = `${name}#${short}`;
-    if (!_usedIds.has(id)) { _usedIds.add(id); return id; }
-    let i = 2;
-    while (_usedIds.has(id + '_' + i)) i++;
-    id = id + '_' + i;
+    const key = `${name}#${short}`;
+    const cached = _idByShaKey.get(key);
+    if (cached) return cached;
+    let id = key;
+    if (_usedIds.has(id)) {
+      let i = 2;
+      while (_usedIds.has(key + '_' + i)) i++;
+      id = key + '_' + i;
+    }
     _usedIds.add(id);
+    _idByShaKey.set(key, id);
     return id;
   }
 

@@ -172,11 +172,27 @@ export class PlacementSystem {
       return false;
     }
 
+    // Build ghost meshes in a local array first and only touch the scene /
+    // this.templateGhosts once every mesh has been created successfully, so a
+    // failure partway through can't leave orphaned meshes in the scene that
+    // aren't tracked (and therefore can't be cleaned up by
+    // _clearTemplateGhosts()).
+    const newGhosts = [];
+    try {
+      for (const { modelInfo, geometry } of resolved) {
+        const ghost = createGhostMesh(geometry, modelInfo);
+        ghost.visible = false;
+        newGhosts.push(ghost);
+      }
+    } catch (e) {
+      console.error('Failed to build template ghost meshes:', e);
+      if (el) el.textContent = `Failed to prepare template "${template.name}"  |  Esc to cancel`;
+      return false;
+    }
+
     this.activeTemplate = template;
     this.templateTiles = resolved;
-    for (const { modelInfo, geometry } of resolved) {
-      const ghost = createGhostMesh(geometry, modelInfo);
-      ghost.visible = false;
+    for (const ghost of newGhosts) {
       this.scene.add(ghost);
       this.templateGhosts.push(ghost);
     }
