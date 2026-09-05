@@ -5,8 +5,6 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host",
-    "build": "vite build",
-    "preview": "vite preview",
     "lint": "eslint .",
     "audit": "npm audit --audit-level=moderate"
   },

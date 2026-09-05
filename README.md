@@ -8,13 +8,14 @@ Docker is the recommended way to run the project because it provides the expecte
 
 ### Requirements
 
-- Docker Engine with Compose support
-- A modern browser with WebGL support
+- Docker with Compose support
+- Git
+- A browser with WebGL support
 - Network access to the configured OpenForge catalog endpoints when browsing or downloading catalog models
 
 ### Start the application
 
-From the project directory, run:
+Clone the repo and from the project directory, run:
 
 ```sh
 docker compose up --build
@@ -86,8 +87,6 @@ npm run dev
 | Command | Purpose |
 | --- | --- |
 | `npm run dev` | Start the Vite development server. |
-| `npm run build` | Create a production build in `dist/`. |
-| `npm run preview` | Preview the production build locally. |
 | `npm run lint` | Run ESLint across the project. |
 | `npm run audit` | Check dependencies for moderate-or-higher vulnerabilities. |
 
@@ -112,4 +111,4 @@ Downloaded models and layout metadata are cached locally. The `downloaded/` dire
 - `server/` contains server-side path and cache helpers.
 - `downloaded/` is runtime storage and should remain writable when running the application.
 
-The development server includes request validation, path traversal protection, request-size limits, and same-origin checks for state-changing local cache operations. It is intended for development and trusted local-network use; put a separately configured production server or reverse proxy in front of it for production hosting.
+The development server includes request validation, path traversal protection, request-size limits, and same-origin checks for state-changing local cache operations. It is intended for development and trusted local-network use.
