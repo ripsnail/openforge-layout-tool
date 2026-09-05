@@ -12,6 +12,7 @@ const unusedCodeRules = {
       varsIgnorePattern: '^_',
       args: 'after-used',
       argsIgnorePattern: '^_',
+      caughtErrors: 'none',
       ignoreRestSiblings: true,
     },
   ],

@@ -517,7 +517,7 @@ export function initPalette(onSelectModel) {
 
     if (thumbUrl) {
       let floating = null;
-      thumbEl.addEventListener('mouseenter', (e) => {
+      thumbEl.addEventListener('mouseenter', () => {
         const rect = thumbEl.getBoundingClientRect();
         floating = document.createElement('div');
         floating.className = 'model-thumb-float';

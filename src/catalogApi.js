@@ -247,19 +247,6 @@ export async function searchBlueprints({ require = [], deny = [], limit = 50, ne
   };
 }
 
-export async function fetchTagTree() {
-  const resp = await fetchWithTimeout(`${API_BASE}/blueprints/tags?models=true&blueprints=true`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ require: [], deny: [] }),
-  }, 30000);
-
-  if (!resp.ok) throw new Error(`Catalog API error: ${resp.status}`);
-  const data = await resp.json();
-  console.log('[catalog] tag tree loaded', { tags: Object.keys(data.tag_counts || {}).length });
-  return data.tag_counts || {};
-}
-
 export async function downloadBlueprintSTL(blueprint, onProgress) {
   const url = blueprint.storage_address || blueprint.modelInfo?.storageUrl;
   if (!url) throw new Error('No storage address for blueprint');

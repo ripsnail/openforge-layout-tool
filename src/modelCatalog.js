@@ -393,17 +393,6 @@ export function getTypeIcon(type) {
   return TYPE_ICONS[type] || '■';
 }
 
-export function hasTag(tags, tag) {
-  return tags.includes(tag);
-}
-
-export function isFloorTile(modelInfo) {
-  const ov = getOverride(modelInfo.fileName);
-  if (ov?.primaryType) return ov.primaryType === 'floor';
-  if (ov?.snapBehavior?.isBase === false) return false;
-  return modelInfo.primaryType === 'floor';
-}
-
 export function isWallTile(modelInfo) {
   const ov = getOverride(modelInfo.fileName);
   if (ov?.primaryType) return ov.primaryType === 'wall';
@@ -424,12 +413,6 @@ export function isColumnTile(modelInfo) {
   return modelInfo.primaryType === 'column';
 }
 
-export function isCornerTile(modelInfo) {
-  const ov = getOverride(modelInfo.fileName);
-  if (ov?.primaryType) return ov.primaryType === 'corner';
-  return modelInfo.primaryType === 'corner';
-}
-
 export function isWallBaseTile(modelInfo) {
   const ov = getOverride(modelInfo.fileName);
   if (ov?.primaryType && ov.primaryType !== 'base') return false;
@@ -439,41 +422,8 @@ export function isWallBaseTile(modelInfo) {
          !modelInfo.typeTags.includes('s2w');
 }
 
-export function hasS2W(modelInfo) {
-  return modelInfo.typeTags.includes('s2w');
-}
-
-export function hasCorner(modelInfo) {
-  return modelInfo.typeTags.includes('corner');
-}
-
-export function hasSide(modelInfo) {
-  return modelInfo.attributes?.includes('side') || modelInfo.typeTags.includes('side');
-}
-
 const PRIMARY_TYPE_OVERRIDES = {
   'dungeon_stone#magnetic.A.openforge.stl': 'wall',
-};
-
-const MODEL_FOOTPRINTS = {
-  'dungeon_stone#base+wall.A.openlock+topless,magnetic+flex.stl': { w: 50.8, d: 12.7 },
-  'dungeon_stone#base+wall.BA.openlock+topless,magnetic+flex.stl': { w: 38.1, d: 12.7 },
-  'dungeon_stone#base+wall.BA+mirror.openlock+topless,magnetic+flex.stl': { w: 38.1, d: 12.7 },
-  'wood#base+wall.A.openlock+topless,magnetic+flex.stl': { w: 50.8, d: 12.7 },
-  'dungeon_stone#wall.A.openforge.stl': { w: 51.1, d: 12.7 },
-  'dungeon_stone#wall.BA.openforge.stl': { w: 38.4, d: 12.7 },
-  'dungeon_stone#wall.BA.openforge,side.stl': { w: 38.3, d: 12.7 },
-  'rough_stone#wall.A.openforge.stl': { w: 51.1, d: 12.7 },
-  'towne+stucco#wall.A.openforge.stl': { w: 50.8, d: 12.7 },
-  'dungeon_stone_block#wall,door+arched+standard.A.openforge.stl': { w: 51.2, d: 12.7 },
-  'dungeon_stone#magnetic.A.openforge.stl': { w: 51.1, d: 12.7 },
-  'dungeon_stone#secret_door.A.bottom,openforge,magnetic+imperial.stl': { w: 51.0, d: 12.7 },
-  'dungeon_stone#secret_door.A.top,magnetic+imperial.stl': { w: 51.1, d: 12.7 },
-  'dungeon_stone#wall,trap+top+axe.2x.magnetic+imperial.stl': { w: 51.2, d: 12.7 },
-  'dungeon_stone#wall,trap+top+dart_holes.2x.magnetic+imperial.stl': { w: 51.2, d: 12.7 },
-  'plain#base+s2w+square+wall.2x2.openlock+topless,magnetic+flex.stl': { w: 50.8, d: 38.1 },
-  'plain#base+s2w+square+corner.2x2.openlock+topless,magnetic+flex.stl': { w: 38.1, d: 38.1 },
-  'dungeon_stone_block#floor+s2w+wall.2x2.openforge.stl': { w: 50.8, d: 38.1 },
 };
 
 export function getTileFootprintMm(modelInfo) {
@@ -485,9 +435,6 @@ export function getTileFootprintMm(modelInfo) {
   if (ov?.customFootprint) {
     return { ...ov.customFootprint };
   }
-
-  const custom = MODEL_FOOTPRINTS[modelInfo.fileName];
-  if (custom) return { ...custom };
 
   if (isWallBaseTile(modelInfo)) {
     return {
@@ -508,14 +455,6 @@ export function getTileFootprintMm(modelInfo) {
     w: (modelInfo.size?.x || 2) * 25.4,
     d: (modelInfo.size?.y || 2) * 25.4,
   };
-}
-
-export function getTileWidthMm(modelInfo) {
-  return getTileFootprintMm(modelInfo).w;
-}
-
-export function getTileDepthMm(modelInfo) {
-  return getTileFootprintMm(modelInfo).d;
 }
 
 function getConnectionCapabilities(typeTags, primaryType, size) {

@@ -38,10 +38,6 @@ export function setThemeColorOverride(theme, hexOrNull) {
   saveOverrides();
 }
 
-export function getAllThemeColorOverrides() {
-  return { ...themeColorOverrides };
-}
-
 export function getThemeLabels() {
   return { ...THEME_LABELS };
 }

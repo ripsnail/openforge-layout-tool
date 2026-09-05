@@ -150,7 +150,7 @@ function downloadedStlPlugin() {
         }
         next();
       });
-      server.middlewares.use('/getModel', (req, res, next) => {
+      server.middlewares.use('/getModel', (req, res) => {
         const md5 = (req.url || '').replace(/^\//, '').replace(/\.stl$/, '');
         if (!/^[0-9a-f]{32}$/i.test(md5)) {
           res.writeHead(400); res.end('Bad request');

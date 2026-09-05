@@ -1,4 +1,4 @@
-import { loadModelGeometry, createMesh } from './modelLoader.js';
+import { loadModelGeometry } from './modelLoader.js';
 import { parseModelFilename } from './modelCatalog.js';
 import { getManifest } from './downloadedModels.js';
 
@@ -137,16 +137,3 @@ export async function resolveTemplateTiles(template) {
   return resolved;
 }
 
-export async function placeTemplate(template, system, offset) {
-  const resolved = await resolveTemplateTiles(template);
-  return resolved.map(({ tile, modelInfo, geometry }) => {
-    const mesh = createMesh(geometry, modelInfo);
-    mesh.position.set(
-      (tile.x || 0) + (offset?.x || 0),
-      tile.y || 0,
-      (tile.z || 0) + (offset?.z || 0)
-    );
-    mesh.rotation.set(tile.rx || 0, tile.ry || 0, tile.rz || 0);
-    return mesh;
-  });
-}

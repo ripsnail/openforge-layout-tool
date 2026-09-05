@@ -41,10 +41,6 @@ export function hasOverride(fileName) {
   return !!overrides[fileName];
 }
 
-export function getAllOverrides() {
-  return { ...overrides };
-}
-
 export function applyOverride(modelInfo) {
   const ov = overrides[modelInfo.fileName];
   if (!ov) return modelInfo;
@@ -74,27 +70,6 @@ export function applyOverride(modelInfo) {
 
   return result;
 }
-
-export const OVERRIDE_FIELDS = [
-  { key: 'primaryType', label: 'Type', type: 'select', options: ['floor', 'wall', 'base', 'column', 'corner', 'other'] },
-  { key: 'size.x', label: 'Width (tiles)', type: 'number', min: 0.5, max: 8, step: 0.5 },
-  { key: 'size.y', label: 'Depth (tiles)', type: 'number', min: 0.5, max: 8, step: 0.5 },
-  { key: 'format', label: 'Connection Format', type: 'text', placeholder: 'e.g. openlock, openforge' },
-  { key: 'theme', label: 'Theme Override', type: 'text', placeholder: 'e.g. dungeon_stone' },
-  { key: 'displayName', label: 'Display Name', type: 'text', placeholder: 'Custom name' },
-];
-
-export const CUSTOM_FOOTPRINT_FIELDS = [
-  { key: 'w', label: 'Width (mm)', type: 'number', min: 1, max: 200, step: 0.1 },
-  { key: 'd', label: 'Depth (mm)', type: 'number', min: 1, max: 200, step: 0.1 },
-];
-
-export const SNAP_BEHAVIOR_FIELDS = [
-  { key: 'isBase', label: 'Is Base Tile', type: 'checkbox' },
-  { key: 'acceptsWalls', label: 'Accepts Walls', type: 'checkbox' },
-  { key: 'acceptsFloors', label: 'Accepts Floors (stackable)', type: 'checkbox' },
-  { key: 'customSnapRadius', label: 'Custom Snap Radius (mm)', type: 'number', min: 0, max: 500, step: 1 },
-];
 
 export function buildOverrideFromUI(uiState) {
   const ov = {};

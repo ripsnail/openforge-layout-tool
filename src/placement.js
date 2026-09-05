@@ -11,9 +11,6 @@ const INCH = 25.4;
 const QUARTER_INCH = INCH / 4;
 const SNAP_RADIUS = INCH * 5;
 
-const SNAP_DEBUG = false;
-const log = (...args) => { if (SNAP_DEBUG) console.log('[Place]', ...args); };
-
 export class PlacementSystem {
   constructor(scene, camera, controls, ground) {
     this.scene = scene;
@@ -792,7 +789,7 @@ export class PlacementSystem {
     this._requestRenderFrame();
   }
 
-  _onPointerUp(e) {
+  _onPointerUp() {
     if (this._isMarquee && this._marqueeEl) {
       const vp = document.querySelector('#viewport').getBoundingClientRect();
       const r = this._marqueeEl.getBoundingClientRect();
@@ -983,12 +980,9 @@ export class PlacementSystem {
   }
 
   _snapWithConnections(rawPoint, modelInfo, placeRotation) {
-    // snapPoints module removed — default to grid snapping enabled
-    const settings = { grid: true };
-    const gridPoint = settings.grid ? this._snapToGrid(rawPoint) : rawPoint;
+    const gridPoint = this._snapToGrid(rawPoint);
 
     if (modelInfo.typeTags.includes('secret_door')) {
-      log(`secret door snap`);
       return this._snapSecretDoor(rawPoint, gridPoint, modelInfo);
     }
 
@@ -997,7 +991,6 @@ export class PlacementSystem {
       if (stackTop != null) {
         const gridPt = this._snapToGrid(rawPoint);
         gridPt.y = stackTop;
-        log(`base stacked above support → y=${stackTop.toFixed(1)}`);
         return { position: gridPt, rotation: 0, type: 'grid' };
       }
     }
@@ -1007,15 +1000,13 @@ export class PlacementSystem {
       const y = base ? (base.userData.height || 0) : 0;
       const gridPt = this._snapToGrid(rawPoint);
       gridPt.y = y;
-      log(`non-base grid snap → y=${y}`);
       return { position: gridPt, rotation: 0, type: 'grid' };
     }
 
     // point-pair snapping (openlock/magnetic) disabled — always fall back
     // to grid/free snapping.
 
-    log(`${settings.grid ? 'grid' : 'free'} snap → (${gridPoint.x.toFixed(1)}, ${gridPoint.z.toFixed(1)})`);
-    return { position: gridPoint, rotation: 0, type: settings.grid ? 'grid' : 'free' };
+    return { position: gridPoint, rotation: 0, type: 'grid' };
   }
 
   _findBaseAt(point) {

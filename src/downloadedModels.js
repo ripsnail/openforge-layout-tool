@@ -31,10 +31,6 @@ function isValidStl(buffer) {
   return false;
 }
 
-export function clearCorruptCache() {
-  downloadCache.clear();
-}
-
 function thumbPath(safeName) {
   return `/downloaded/thumbs/${safeName}.png`;
 }
