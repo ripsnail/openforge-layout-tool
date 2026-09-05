@@ -1,5 +1,6 @@
 import { loadModelGeometry } from './modelLoader.js';
 import { getManifest } from './downloadedModels.js';
+import { setStorageItem } from './storage.js';
 
 const INCH = 25.4;
 const USER_TEMPLATES_KEY = 'openforge-user-templates';
@@ -16,11 +17,7 @@ export function initUserTemplates() {
 }
 
 function saveUserTemplates() {
-  try {
-    localStorage.setItem(USER_TEMPLATES_KEY, JSON.stringify(userTemplates));
-  } catch (e) {
-    console.warn('Failed to save user templates');
-  }
+  setStorageItem(USER_TEMPLATES_KEY, JSON.stringify(userTemplates));
 }
 
 export function getUserTemplates() {

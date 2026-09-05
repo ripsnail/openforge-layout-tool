@@ -1,7 +1,5 @@
 import { blueprintToModelInfo, fetchWithTimeout } from './catalogApi.js';
 import { generateModelId, registerModelId } from './modelCatalog.js';
-// scanner removed — no-op invalidation logic eliminated
-
 const STORAGE_KEY = 'openforge-downloaded-models';
 
 const downloadCache = new Map();
@@ -344,7 +342,6 @@ export async function importBlueprint(blueprint, stlArrayBuffer) {
     registerModelId(entry._id);
   }
 
-  // scan cache invalidation removed
   saveManifest();
   if (entry.sha) syncMetadataToServer({ ...modelInfo, sha: entry.sha });
   const thumbUrl = blueprint.images?.[0]?.image_url;
@@ -368,7 +365,6 @@ export function removeDownloaded(_id) {
   const entry = manifest.find(m => m._id === _id);
   const fileName = entry?.fileName;
   const sha = entry?.sha;
-  // scan cache invalidation removed
   const cached = downloadCache.get(_id);
   if (cached) {
     if (cached.blobUrl) URL.revokeObjectURL(cached.blobUrl);

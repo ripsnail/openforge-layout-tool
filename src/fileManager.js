@@ -1,3 +1,5 @@
+import { setStorageItem, removeStorageItem } from './storage.js';
+
 const FILES_KEY = 'openforge-files';
 const ACTIVE_KEY = 'openforge-active-file';
 const LEGACY_KEY = 'openforge-layout';
@@ -23,8 +25,8 @@ export function initFileManager() {
     if (legacyData) {
       const id = generateId();
       files = [{ id, name: 'Untitled' }];
-      try { localStorage.setItem('openforge-layout-' + id, legacyData); } catch (e) { /* ignore localStorage errors */ }
-      try { localStorage.removeItem(LEGACY_KEY); } catch (e) { /* ignore localStorage errors */ }
+      setStorageItem('openforge-layout-' + id, legacyData);
+      removeStorageItem(LEGACY_KEY);
     } else {
       const id = generateId();
       files = [{ id, name: 'Untitled' }];
@@ -56,11 +58,11 @@ export function getActiveName() {
 }
 
 function saveIndex() {
-  try { localStorage.setItem(FILES_KEY, JSON.stringify(files)); } catch (e) {/* ignore localStorage errors */ }
+  setStorageItem(FILES_KEY, JSON.stringify(files));
 }
 
 function saveActiveId() {
-  try { localStorage.setItem(ACTIVE_KEY, activeId); } catch (e) {/* ignore localStorage errors */ }
+  setStorageItem(ACTIVE_KEY, activeId);
 }
 
 function fileKey(id) {
@@ -68,24 +70,7 @@ function fileKey(id) {
 }
 
 export function saveFileData(id, data) {
-  try {
-    localStorage.setItem(fileKey(id), JSON.stringify(data));
-    return true;
-  } catch (e) {
-    warnQuotaOnce('layout', e);
-    return false;
-  }
-}
-
-let quotaWarned = false;
-function warnQuotaOnce(what, e) {
-  if (quotaWarned) return;
-  quotaWarned = true;
-  console.warn(
-    `Failed to save ${what} — browser storage is full. ` +
-    `Export your work to a file to avoid losing it.`,
-    e
-  );
+  return setStorageItem(fileKey(id), JSON.stringify(data));
 }
 
 export function loadFileData(id) {
@@ -126,7 +111,7 @@ export function deleteFile(id) {
   if (idx < 0) return false;
 
   files.splice(idx, 1);
-  try { localStorage.removeItem(fileKey(id)); } catch (e) {/* ignore localStorage errors */ }
+  removeStorageItem(fileKey(id));
   saveIndex();
 
   if (activeId === id) {

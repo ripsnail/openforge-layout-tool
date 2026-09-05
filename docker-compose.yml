@@ -5,7 +5,6 @@ services:
       - "5173:5173"
     volumes:
       - ./src:/app/src:ro
-      - ./dist:/app/dist:ro
       - ./public:/app/public:ro
       - ./index.html:/app/index.html:ro
       - ./downloaded:/app/downloaded

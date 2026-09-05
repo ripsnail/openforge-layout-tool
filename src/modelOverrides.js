@@ -1,3 +1,5 @@
+import { setStorageItem } from './storage.js';
+
 const OVERRIDES_KEY = 'openforge-model-overrides';
 
 let overrides = {};
@@ -12,11 +14,7 @@ export function initOverrides() {
 }
 
 function save() {
-  try {
-    localStorage.setItem(OVERRIDES_KEY, JSON.stringify(overrides));
-  } catch (e) {
-    console.warn('Failed to save overrides');
-  }
+  setStorageItem(OVERRIDES_KEY, JSON.stringify(overrides));
 }
 
 export function getOverride(fileName) {
@@ -24,11 +22,7 @@ export function getOverride(fileName) {
 }
 
 export function setOverride(fileName, overrideData) {
-  if (overrideData === null || overrideData === undefined) {
-    delete overrides[fileName];
-  } else {
-    overrides[fileName] = { ...overrideData, updatedAt: Date.now() };
-  }
+  overrides[fileName] = { ...overrideData, updatedAt: Date.now() };
   save();
 }
 

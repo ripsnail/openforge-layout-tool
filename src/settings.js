@@ -1,4 +1,5 @@
 import { THEME_LABELS } from './modelCatalog.js';
+import { setStorageItem } from './storage.js';
 
 const THEME_COLOR_OVERRIDES_KEY = 'openforge-theme-color-overrides';
 
@@ -14,11 +15,7 @@ export function initSettings() {
 }
 
 function saveOverrides() {
-  try {
-    localStorage.setItem(THEME_COLOR_OVERRIDES_KEY, JSON.stringify(themeColorOverrides));
-  } catch (e) {
-    console.warn('Failed to save theme color overrides');
-  }
+  setStorageItem(THEME_COLOR_OVERRIDES_KEY, JSON.stringify(themeColorOverrides));
 }
 
 export function getThemeColorOverride(theme) {

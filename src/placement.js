@@ -1,11 +1,12 @@
 import * as THREE from 'three';
 import { loadModelGeometry, createMesh, createGhostMesh, createOutlineMesh, recolorMesh, disposeMeshMaterial, pruneGeometries } from './modelLoader.js';
-import { isWallTile, isBaseTile, isColumnTile, isWallBaseTile, getTileFootprintMm, getThemeColor, TEXTURE_OPTIONS, getTextureOverride, setTextureOverride, getEffectiveTextureTags, deriveTextureTags, formatTextureTag, escapeHtml } from './modelCatalog.js';
+import { isWallTile, isBaseTile, isColumnTile, isWallBaseTile, getTileFootprintMm, getThemeColor, TEXTURE_OPTIONS, getTextureOverride, setTextureOverride, getEffectiveTextureTags, deriveTextureTags, formatTextureTag } from './modelCatalog.js';
 import { UndoRedoManager, PlaceCommand, RemoveCommand, MoveCommand, RotateCommand, GroupRotateCommand, BatchCommand } from './undoRedo.js';
 import { getManifest, syncMetadataToServer, saveManifest, addDownloadedModelEntry } from './downloadedModels.js';
 import { resolveTemplateTiles } from './templates.js';
 import { saveFileData, loadFileData, getActiveId } from './fileManager.js';
 import { fetchWithTimeout } from './catalogApi.js';
+import { updateBom, updateModelCount } from './placementUi.js';
 
 const INCH = 25.4;
 const QUARTER_INCH = INCH / 4;
@@ -376,8 +377,6 @@ export class PlacementSystem {
           this._isMarquee = true;
           this._marqueeStart = { x: e.clientX, y: e.clientY };
           this._marqueeShift = true;
-        } else {
-          //this._deselectAll();
         }
       }
     }
@@ -1286,8 +1285,7 @@ export class PlacementSystem {
   }
 
   _updateModelCount() {
-    const el = document.getElementById('model-count');
-    if (el) el.textContent = `Models: ${this.placedMeshes.length}`;
+    updateModelCount(this.placedMeshes.length);
   }
 
   exportLayout() {
@@ -1452,21 +1450,7 @@ export class PlacementSystem {
   }
 
   _updateBom() {
-    const list = document.getElementById('bom-list');
-    if (!list) return;
-    const counts = {};
-    for (const m of this.placedMeshes) {
-      const name = m.userData.modelInfo.fileName || 'unknown';
-      counts[name] = (counts[name] || 0) + 1;
-    }
-    const entries = Object.entries(counts).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
-    if (entries.length === 0) {
-      list.innerHTML = '<div class="bom-empty">No models placed</div>';
-      return;
-    }
-    list.innerHTML = entries.map(([name, count]) =>
-      `<div class="bom-item"><span class="bom-name" title="${escapeHtml(name)}">${escapeHtml(name)}</span><span class="bom-count">${count}</span></div>`
-    ).join('');
+    updateBom(this.placedMeshes);
   }
 
   async _downloadAllModels() {

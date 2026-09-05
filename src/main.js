@@ -5,7 +5,6 @@ import { initOverrides } from './modelOverrides.js';
 import { getThemeColor } from './modelCatalog.js';
 import { initSettings, getThemeColorOverride, setThemeColorOverride, getThemeLabels } from './settings.js';
 import { TEMPLATES, initUserTemplates, getUserTemplates, saveUserTemplate, deleteUserTemplate, selectionToTemplate } from './templates.js';
-// snap settings and UI removed
 import {
   initFileManager, getFiles, getActiveId, getActiveName,
   createFile, renameFile, deleteFile, switchToFile,
@@ -197,9 +196,6 @@ function renderTemplatesMenu(menu, placement) {
     }
   }
 }
-
-// initSnapMenu removed — snapping UI and experimental openlock/magnetic
-// controls were removed intentionally.
 
 function hexToPickerValue(color) {
   if (typeof color === 'number') {
