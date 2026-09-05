@@ -1480,7 +1480,7 @@ export class PlacementSystem {
     };
   }
 
-  importLayout(data) {
+  importLayout(data, onProgress) {
     this.undoRedo.clear();
     for (const m of [...this.placedMeshes]) {
       this.scene.remove(m);
@@ -1491,7 +1491,7 @@ export class PlacementSystem {
     this._deselectAll();
     this._requestRenderFrame();
 
-    return this._loadFromData(data.tiles || data);
+    return this._loadFromData(data.tiles || data, onProgress);
   }
 
   _saveState() {
@@ -1514,12 +1514,13 @@ export class PlacementSystem {
     saveFileData(getActiveId(), { version: 1, tiles });
   }
 
-  async _loadFromData(data) {
+  async _loadFromData(data, onProgress) {
     const manifest = getManifest();
     // Phase 1 (sync): resolve model info for every tile — manifest lookup,
     // saved overrides. No I/O here.
     const resolved = [];
     const blueprintPromises = new Map();
+    onProgress?.({ loaded: 0, total: data.length });
     for (const item of data) {
       let modelInfo;
       const entry = item._id ? manifest.find((m) => m._id === item._id) : null;
@@ -1595,11 +1596,17 @@ export class PlacementSystem {
       resolved.push({ item, modelInfo });
     }
     // Phase 2: load all geometries concurrently (was serial: N× latency).
+    let loaded = 0;
     const geos = await Promise.all(
       resolved.map(async ({ item, modelInfo }) => {
         try {
-          return await loadModelGeometry(modelInfo);
+          const geometry = await loadModelGeometry(modelInfo);
+          loaded += 1;
+          onProgress?.({ loaded, total: resolved.length });
+          return geometry;
         } catch (e) {
+          loaded += 1;
+          onProgress?.({ loaded, total: resolved.length });
           console.warn("Failed to restore model:", item.fileName);
           return null;
         }

@@ -3,8 +3,8 @@ dist/
 # Keep downloaded directories tracked but ignore their contents; allow .gitkeep files
 downloaded/*
 !downloaded/.gitkeep
+!downloaded/thumbs/
 downloaded/thumbs/*
-!downloaded/thumbs/.gitkeep
 models/
 
 metadata.sqlite

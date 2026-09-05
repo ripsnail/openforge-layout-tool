@@ -122,11 +122,13 @@ function initBomResize() {
 
 let isLoading = false;
 
-function setLoading(loading) {
+function setLoading(loading, message = "Loading models...") {
   isLoading = loading;
   const overlay = document.getElementById("loading-overlay");
   if (overlay) {
     overlay.classList.toggle("active", loading);
+    const text = overlay.querySelector(".loading-text");
+    if (text) text.textContent = message;
   }
 }
 
@@ -376,7 +378,9 @@ function initFileMenu(placement) {
         try {
           const text = await file.text();
           const data = JSON.parse(text);
-          await placement.importLayout(data);
+          await placement.importLayout(data, ({ loaded, total }) => {
+            setLoading(true, `Loading models: ${loaded}/${total}`);
+          });
         } catch (err) {
           console.error("Failed to load layout:", err);
           notify(
