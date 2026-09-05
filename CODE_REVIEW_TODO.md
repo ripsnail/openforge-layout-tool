@@ -90,7 +90,7 @@ below are the remaining gaps, bugs, and cleanup opportunities.
   Consider batching these or caching the "confirmed cached" result in
   `localStorage`/IndexedDB so repeat sessions skip the HEAD entirely.
 
-- [ ] **`_outlineGeoCache` and material caches in
+- [x] **`_outlineGeoCache` and material caches in
   [src/modelLoader.js](src/modelLoader.js) are keyed by rounded bounding-box
   size / color+roughness+metalness strings** — reasonable, but there's no
   eviction tied to actual usage the way `pruneGeometries()` handles
@@ -98,7 +98,7 @@ below are the remaining gaps, bugs, and cleanup opportunities.
   this cap is generous enough for real catalogs (hundreds of distinct tile
   footprints) or make it configurable.
 
-- [ ] **`getTileFootprintMm`/`isBaseTile`/etc. in
+- [x] **`getTileFootprintMm`/`isBaseTile`/etc. in
   [src/modelCatalog.js](src/modelCatalog.js) call `getOverride(modelInfo.fileName)`
   on every invocation**, and these are called in hot paths
   (`_checkCollision`, `_findStackTop`, `_findBaseAt`) that run on every
@@ -111,12 +111,12 @@ below are the remaining gaps, bugs, and cleanup opportunities.
 
 ## 6. Code Quality / Maintainability
 
-- [ ] **Duplicated material-creation logic** between `createMesh()` and
+- [x] **Duplicated material-creation logic** between `createMesh()` and
   `recolorMesh()` in [src/modelLoader.js](src/modelLoader.js) (identical
   cache-key computation + `MeshStandardMaterial` construction block
   repeated verbatim). Extract a shared `_getOrCreateMaterial(color)` helper.
 
-- [ ] **Duplicated ground-intersection math**: `_getGroundIntersect()` and
+- [x] **Duplicated ground-intersection math**: `_getGroundIntersect()` and
   `_getGroundIntersectAt()` in [src/placement.js](src/placement.js) are
   nearly identical (the only difference is which point is used to set up
   the raycaster). Factor out the shared ray/plane math into one function

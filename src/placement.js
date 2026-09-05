@@ -937,17 +937,7 @@ export class PlacementSystem {
   }
 
   _getGroundIntersect() {
-    this.raycaster.setFromCamera(this.pointer, this.camera);
-    const intersect = new THREE.Vector3();
-    const ray = this.raycaster.ray;
-    const denom = ray.direction.dot(this.groundPlane.normal);
-    if (Math.abs(denom) < 0.0001) return null;
-
-    const t = -(ray.origin.dot(this.groundPlane.normal) + this.groundPlane.constant) / denom;
-    if (t < 0) return null;
-
-    intersect.copy(ray.origin).add(ray.direction.clone().multiplyScalar(t));
-    return intersect;
+    return this._getGroundIntersectAt(this.pointer);
   }
 
   _getGroundIntersectAt(screenPoint) {
@@ -1054,8 +1044,10 @@ export class PlacementSystem {
   _findBaseAt(point) {
     for (const placed of this.placedMeshes) {
       const pInfo = placed.userData.modelInfo;
-      if (!pInfo || !isBaseTile(pInfo)) continue;
-      const pf = getTileFootprintMm(pInfo);
+      if (!pInfo) continue;
+      const tileMeta = placed.userData.tileMeta;
+      if (!(tileMeta?.isBase ?? isBaseTile(pInfo))) continue;
+      const pf = tileMeta?.footprint || getTileFootprintMm(pInfo);
       const halfW = pf.w / 2;
       const halfD = pf.d / 2;
       if (Math.abs(point.x - placed.position.x) <= halfW &&
@@ -1077,9 +1069,11 @@ export class PlacementSystem {
     for (const placed of this.placedMeshes) {
       const pInfo = placed.userData.modelInfo;
       if (!pInfo) continue;
-      if (!isWallTile(pInfo) && !isColumnTile(pInfo) && !isWallBaseTile(pInfo) && !isBaseTile(pInfo)) continue;
+      const tileMeta = placed.userData.tileMeta;
+      if (tileMeta ? !tileMeta.isWall && !tileMeta.isColumn && !tileMeta.isWallBase && !tileMeta.isBase :
+        !isWallTile(pInfo) && !isColumnTile(pInfo) && !isWallBaseTile(pInfo) && !isBaseTile(pInfo)) continue;
 
-      const pf = getTileFootprintMm(pInfo);
+      const pf = tileMeta?.footprint || getTileFootprintMm(pInfo);
       const pRot = placed.rotation.y;
       const pw = Math.abs(Math.cos(pRot)) * pf.w + Math.abs(Math.sin(pRot)) * pf.d;
       const pd = Math.abs(Math.sin(pRot)) * pf.w + Math.abs(Math.cos(pRot)) * pf.d;
