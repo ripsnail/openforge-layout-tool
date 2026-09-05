@@ -2,6 +2,22 @@
 
 A browser-based 3D layout tool for arranging OpenForge STL models, saving layouts, and exporting them for sharing.
 
+## Features
+
+- Browse the OpenForge model catalog and place STL models in a 3D viewport.
+- Select multiple models by holding **Shift** while dragging a selection box.
+- Move selected models with the **Arrow** keys. Hold **Shift** while moving for finer movement increments. Use **Page Up** and **Page Down** to move them vertically when needed.
+- Rotate models with **R**, **X** and **Z**
+- Copy and paste selections with **Ctrl+C** and **Ctrl+V**.
+- Undo and redo changes with **Ctrl+Z** and **Ctrl+Y**.
+- Rotate a group around its shared center point rather than rotating each model independently.
+- Hold **Shift** while rotating for finer rotation increments.
+- Use the standard 3D viewport controls to orbit, pan, and zoom around the layout.
+- Save Templates for small reusable templates for local use.
+- Save Layouts for sharing builds or saving progress.
+
+Page Up and Page Down are primarily a workaround for occasional snapping issues, particularly when working on multi-level builds. In most layouts, models should snap into the correct vertical position automatically.
+
 ## Recommended setup: Docker
 
 Docker is the recommended way to run the project because it provides the expected Node.js runtime and keeps the development environment consistent.
