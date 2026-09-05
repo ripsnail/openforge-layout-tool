@@ -142,6 +142,16 @@ function closeAllMenus() {
   });
 }
 
+function layoutDownloadName(sceneName) {
+  const safeName = String(sceneName || "Untitled")
+    .trim()
+    .replace(/[<>:"/\\|?*]/g, "-")
+    .replace(/\s+/g, " ")
+    .replace(/^\.+|\.+$/g, "")
+    .trim();
+  return `${safeName || "Untitled"}.json`;
+}
+
 function toggleMenu(menu, trigger) {
   const isOpen = menu.classList.contains("open");
   closeAllMenus();
@@ -339,7 +349,7 @@ function initFileMenu(placement) {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = "openforge-layout.json";
+      a.download = layoutDownloadName(getActiveName());
       a.click();
       URL.revokeObjectURL(url);
     });
