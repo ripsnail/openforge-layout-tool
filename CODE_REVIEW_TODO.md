@@ -131,14 +131,14 @@ below are the remaining gaps, bugs, and cleanup opportunities.
 
 ## 7. Verify / Double-Check (not necessarily bugs)
 
-- [ ] **Dependency versions in [package.json](package.json)** —
+- [x] **Dependency versions in [package.json](package.json)** —
   `eslint": "^10.10.0"`, `@eslint/js": "^10.0.1"`, `vite": "^8.2.2"` are
   unusually high major versions. Confirm these resolve to real, intended
   releases (run `npm install` / `npm outdated` and check for typos or
   unintended pre-release tags) rather than being a documentation/version
   bump mistake.
 
-- [ ] **`models/` and `public/` directories** are present in the repo root
+- [x] **`models/` and `public/` directories** are present in the repo root
   but weren't part of this review (out of scope of `src/`/`server/`).
   Confirm nothing sensitive (private keys, local absolute paths, etc.) is
   committed there, since `.gitignore`/`.dockerignore` weren't fully audited
