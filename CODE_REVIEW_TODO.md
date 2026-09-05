@@ -64,7 +64,7 @@ below are the remaining gaps, bugs, and cleanup opportunities.
   the user gets no indication their "Load Layout" action failed. Add a
   visible error message.
 
-- [ ] **`localStorage` quota exceeded** ([src/storage.js](src/storage.js))
+- [x] **`localStorage` quota exceeded** ([src/storage.js](src/storage.js))
   is warned once via `console.warn` and then silently ignored forever after
   (`warnedKeys` dedup). Since this can mean layout autosave silently stops
   working, surface this to the user (e.g. a persistent banner) rather than

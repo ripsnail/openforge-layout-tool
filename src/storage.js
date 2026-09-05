@@ -1,3 +1,5 @@
+import { notify } from './notifications.js';
+
 const warnedKeys = new Set();
 
 function warnOnce(key, message, error) {
@@ -21,6 +23,7 @@ export function setStorageItem(key, value) {
     return true;
   } catch (error) {
     warnOnce(`write:${key}`, `Failed to save browser storage key "${key}". Storage may be full.`, error);
+    notify('Browser storage is full. Automatic saving may not work until space is freed.', { persistent: true });
     return false;
   }
 }
