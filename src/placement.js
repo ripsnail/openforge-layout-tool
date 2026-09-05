@@ -83,6 +83,8 @@ export class PlacementSystem {
     this._isMarquee = false;
     this._marqueeStart = null;
     this._marqueeEl = null;
+    this._backgroundPointerDown = null;
+    this._backgroundPointerMoved = false;
 
     this._requestRender = null;
     this._saveStateTimer = null;
@@ -388,6 +390,9 @@ export class PlacementSystem {
     if (e.target.closest("#toolbar") || e.target.closest(".dropdown-menu"))
       return;
 
+    this._backgroundPointerDown = null;
+    this._backgroundPointerMoved = false;
+
     const rect = e.currentTarget.getBoundingClientRect();
     this.pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
     this.pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
@@ -472,6 +477,8 @@ export class PlacementSystem {
           this._isMarquee = true;
           this._marqueeStart = { x: e.clientX, y: e.clientY };
           this._marqueeShift = true;
+        } else {
+          this._backgroundPointerDown = { x: e.clientX, y: e.clientY };
         }
       }
     }
@@ -498,6 +505,14 @@ export class PlacementSystem {
   }
 
   _processPointerMove(clientX, clientY, target) {
+    if (this._backgroundPointerDown) {
+      const dx = clientX - this._backgroundPointerDown.x;
+      const dy = clientY - this._backgroundPointerDown.y;
+      if (Math.hypot(dx, dy) > this._dragThreshold) {
+        this._backgroundPointerMoved = true;
+      }
+    }
+
     const rect = target.getBoundingClientRect();
     this.pointer.x = ((clientX - rect.left) / rect.width) * 2 - 1;
     this.pointer.y = -((clientY - rect.top) / rect.height) * 2 + 1;
@@ -1023,6 +1038,17 @@ export class PlacementSystem {
       this._syncOutlines();
       this._debounceSave();
     }
+
+    if (
+      this._backgroundPointerDown &&
+      !this._backgroundPointerMoved &&
+      this.currentTool === "select"
+    ) {
+      this._deselectAll();
+    }
+
+    this._backgroundPointerDown = null;
+    this._backgroundPointerMoved = false;
     this._isDragging = false;
     this._dragStartPoint = null;
     this._dragStartPositions = null;
