@@ -740,9 +740,13 @@ export function initPalette(onSelectModel) {
         try {
           const stlData = await downloadBlueprintSTL(blueprint);
           const newModelInfo = await importBlueprint(blueprint, stlData);
-          downloadedModels.push({ ...newModelInfo, source: "downloaded" });
+          const savedModel = { ...newModelInfo, source: "downloaded" };
+          downloadedModels.push(savedModel);
+          allLocalModels.push(savedModel);
+          localTagCounts = buildTagCounts(allLocalModels);
           importBtn.textContent = "✓";
           importBtn.title = "Imported!";
+          render();
         } catch (err) {
           console.error("Import failed:", err);
           importBtn.textContent = "!";
