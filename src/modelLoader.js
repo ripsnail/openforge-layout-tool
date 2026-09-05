@@ -1,5 +1,8 @@
 import * as THREE from "three";
 import { STLLoader } from "three/addons/loaders/STLLoader.js";
+import { Line2 } from "three/addons/lines/Line2.js";
+import { LineGeometry } from "three/addons/lines/LineGeometry.js";
+import { LineMaterial } from "three/addons/lines/LineMaterial.js";
 import { ensureCached, isValidStl } from "./downloadedModels.js";
 import { fetchWithTimeout } from "./catalogApi.js";
 import { getCachedStlBuffer, putCachedStlBuffer } from "./stlCache.js";
@@ -384,12 +387,20 @@ export function createOutlineMesh(mesh) {
       _outlineGeoCache.delete(firstKey);
     }
   }
-  const mat = new THREE.LineBasicMaterial({
+  const lineGeometry = new LineGeometry();
+  lineGeometry.setPositions(Array.from(geo.attributes.position.array));
+  const mat = new LineMaterial({
     color: 0x6c63ff,
+    linewidth: 3,
     transparent: true,
     opacity: 0.8,
+    resolution: new THREE.Vector2(
+      document.documentElement.clientWidth,
+      document.documentElement.clientHeight,
+    ),
   });
-  const line = new THREE.LineSegments(geo, mat);
+  const line = new Line2(lineGeometry, mat);
+  line.computeLineDistances();
   line.position.copy(mesh.position);
   line.rotation.copy(mesh.rotation);
   line.scale.copy(mesh.scale);
