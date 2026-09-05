@@ -7,6 +7,36 @@ const USER_TEMPLATES_KEY = "openforge-user-templates";
 
 let userTemplates = [];
 
+function modelInfoFromTile(tile, file) {
+  const lowerFile = String(file || "").toLowerCase();
+  const primaryType = lowerFile.includes("#base")
+    ? "base"
+    : lowerFile.includes("#wall")
+      ? "wall"
+      : lowerFile.includes("#column") || lowerFile.includes("column.")
+        ? "column"
+        : lowerFile.includes("#floor")
+          ? "floor"
+          : "other";
+  const typeTags = primaryType === "other" ? [] : [primaryType];
+  if (primaryType === "base" && lowerFile.includes("wall")) {
+    typeTags.push("wall");
+  }
+
+  return {
+    _id: tile._id || tile.sha || file,
+    fileName: file,
+    primaryType,
+    typeTags,
+    textureTags: [],
+    theme: (file.split("#")[0] || "plain").replace(/%/g, "+"),
+    storageUrl: tile.storageUrl || null,
+    sha: tile.sha || null,
+    catalogId: tile.catalogId || null,
+    source: "downloaded",
+  };
+}
+
 export function initUserTemplates() {
   try {
     const raw = localStorage.getItem(USER_TEMPLATES_KEY);
@@ -460,8 +490,9 @@ export async function resolveTemplateTiles(template) {
         ? manifest.find((m) => m.fileName === file)
         : null;
     const useEntry = entry || entryBySha || entryByFile;
-    if (!useEntry?.modelInfo) continue;
-    modelInfo = { ...useEntry.modelInfo };
+    modelInfo = useEntry?.modelInfo
+      ? { ...useEntry.modelInfo }
+      : modelInfoFromTile(tile, file);
     if (tile._id) modelInfo._id = tile._id;
     if (tile.storageUrl && !modelInfo.storageUrl) {
       modelInfo.storageUrl = tile.storageUrl;
