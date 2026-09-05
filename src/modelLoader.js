@@ -1,10 +1,19 @@
-import * as THREE from 'three';
-import { STLLoader } from 'three/addons/loaders/STLLoader.js';
-import { ensureCached, isValidStl } from './downloadedModels.js';
-import { fetchWithTimeout } from './catalogApi.js';
-import { getCachedStlBuffer, putCachedStlBuffer } from './stlCache.js';
-import { resolveTextureColor, getTextureOverride, getEffectiveTextureTags, getTileFootprintMm, isBaseTile, isWallTile, isColumnTile, isWallBaseTile } from './modelCatalog.js';
-import { getThemeColorOverride } from './settings.js';
+import * as THREE from "three";
+import { STLLoader } from "three/addons/loaders/STLLoader.js";
+import { ensureCached, isValidStl } from "./downloadedModels.js";
+import { fetchWithTimeout } from "./catalogApi.js";
+import { getCachedStlBuffer, putCachedStlBuffer } from "./stlCache.js";
+import {
+  resolveTextureColor,
+  getTextureOverride,
+  getEffectiveTextureTags,
+  getTileFootprintMm,
+  isBaseTile,
+  isWallTile,
+  isColumnTile,
+  isWallBaseTile,
+} from "./modelCatalog.js";
+import { getThemeColorOverride } from "./settings.js";
 
 const geometryCache = new Map();
 const materialCache = new Map();
@@ -61,7 +70,11 @@ export function pruneGeometries(keepKeys) {
   const keep = keepKeys instanceof Set ? keepKeys : new Set(keepKeys || []);
   for (const key of [...geometryCache.keys()]) {
     if (!keep.has(key)) {
-      try { geometryCache.get(key)?.dispose(); } catch (e) { console.warn('Failed to dispose cached geometry:', e); }
+      try {
+        geometryCache.get(key)?.dispose();
+      } catch (e) {
+        console.warn("Failed to dispose cached geometry:", e);
+      }
       geometryCache.delete(key);
     }
   }
@@ -70,9 +83,9 @@ const loader = new STLLoader();
 const _outlineGeoCache = new Map();
 
 function hexToNumber(hex) {
-  if (typeof hex === 'number') return hex;
-  if (typeof hex !== 'string') return null;
-  let h = hex.trim().replace(/^#/, '');
+  if (typeof hex === "number") return hex;
+  if (typeof hex !== "string") return null;
+  let h = hex.trim().replace(/^#/, "");
   if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
   const num = parseInt(h, 16);
   return isNaN(num) ? null : num;
@@ -93,8 +106,12 @@ export async function loadModelGeometry(modelInfo) {
   }
 
   const promise = (async () => {
-    const fileName = modelInfo.fileName || '';
-    const { fromCdn, buffer } = await fetchAndCacheGeometry(modelInfo, cacheKey, fileName);
+    const fileName = modelInfo.fileName || "";
+    const { fromCdn, buffer } = await fetchAndCacheGeometry(
+      modelInfo,
+      cacheKey,
+      fileName,
+    );
 
     let geometry = geometryCache.get(cacheKey);
 
@@ -124,10 +141,24 @@ async function fetchAndCacheGeometry(modelInfo, cacheKey, fileName) {
         let geometry = loader.parse(cached);
         geometry = convertZupToYup(geometry);
         centerGeometry(geometry);
-        lruSet(geometryCache, cacheKey, geometry, MODEL_CACHE_LIMITS.geometry, (k, g) => { try { g?.dispose(); } catch (e) { console.warn('Failed to dispose cached geometry:', e); } });
+        lruSet(
+          geometryCache,
+          cacheKey,
+          geometry,
+          MODEL_CACHE_LIMITS.geometry,
+          (k, g) => {
+            try {
+              g?.dispose();
+            } catch (e) {
+              console.warn("Failed to dispose cached geometry:", e);
+            }
+          },
+        );
         return { fromCdn: false, buffer: cached };
       }
-    } catch (e) { console.warn('Failed to read cached STL:', e); }
+    } catch (e) {
+      console.warn("Failed to read cached STL:", e);
+    }
   }
 
   let resp = null;
@@ -154,20 +185,36 @@ async function fetchAndCacheGeometry(modelInfo, cacheKey, fileName) {
     if (!resp || !resp.ok) throw new Error(`No STL found for ${fileName}`);
   }
 
-  const ct = resp.headers.get('content-type') || '';
-  if (ct.includes('text/html')) throw new Error(`No STL found for ${fileName}`);
+  const ct = resp.headers.get("content-type") || "";
+  if (ct.includes("text/html")) throw new Error(`No STL found for ${fileName}`);
   const buffer = await resp.arrayBuffer();
   if (!isValidStl(buffer)) throw new Error(`No STL found for ${fileName}`);
 
   // Persist to the browser cache so the next refresh skips the network.
   if (sha) {
-    try { await putCachedStlBuffer(sha, buffer); } catch (e) { console.warn('Failed to cache STL in IndexedDB:', e); }
+    try {
+      await putCachedStlBuffer(sha, buffer);
+    } catch (e) {
+      console.warn("Failed to cache STL in IndexedDB:", e);
+    }
   }
 
   let geometry = loader.parse(buffer);
   geometry = convertZupToYup(geometry);
   centerGeometry(geometry);
-  lruSet(geometryCache, cacheKey, geometry, MODEL_CACHE_LIMITS.geometry, (k, g) => { try { g?.dispose(); } catch (e) { console.warn('Failed to dispose cached geometry:', e); } });
+  lruSet(
+    geometryCache,
+    cacheKey,
+    geometry,
+    MODEL_CACHE_LIMITS.geometry,
+    (k, g) => {
+      try {
+        g?.dispose();
+      } catch (e) {
+        console.warn("Failed to dispose cached geometry:", e);
+      }
+    },
+  );
 
   return { fromCdn, buffer };
 }
@@ -175,14 +222,15 @@ async function fetchAndCacheGeometry(modelInfo, cacheKey, fileName) {
 function resolveCdnUrl(modelInfo) {
   let url = modelInfo.storageUrl;
   if (!url) return null;
-  if (url.startsWith('https://objects.openforge.tools/')) {
-    url = '/catalog-objects' + url.replace('https://objects.openforge.tools', '');
+  if (url.startsWith("https://objects.openforge.tools/")) {
+    url =
+      "/catalog-objects" + url.replace("https://objects.openforge.tools", "");
   }
   return url;
 }
 
 function convertZupToYup(geometry) {
-  const pos = geometry.getAttribute('position');
+  const pos = geometry.getAttribute("position");
   if (!pos) return geometry;
 
   const verts = new Float32Array(pos.array);
@@ -196,7 +244,7 @@ function convertZupToYup(geometry) {
   }
 
   const newGeo = new THREE.BufferGeometry();
-  newGeo.setAttribute('position', new THREE.BufferAttribute(verts, 3));
+  newGeo.setAttribute("position", new THREE.BufferAttribute(verts, 3));
   newGeo.setIndex(geometry.getIndex());
   // Normals are recomputed from the rotated positions — no need to copy
   // the source normals first.
@@ -216,8 +264,6 @@ function centerGeometry(geometry) {
 
   geometry.translate(-cx, -minY, -cz);
 }
-
-
 
 export function resolveModelColor(modelInfo) {
   const tags = getEffectiveTextureTags(modelInfo);
@@ -243,7 +289,19 @@ function getOrCreateMaterial(color) {
       flatShading: false,
     });
     material.userData.shared = true;
-    lruSet(materialCache, cacheKey, material, MODEL_CACHE_LIMITS.material, (k, m) => { try { m?.dispose(); } catch (e) { console.warn('Failed to dispose cached material:', e); } });
+    lruSet(
+      materialCache,
+      cacheKey,
+      material,
+      MODEL_CACHE_LIMITS.material,
+      (k, m) => {
+        try {
+          m?.dispose();
+        } catch (e) {
+          console.warn("Failed to dispose cached material:", e);
+        }
+      },
+    );
   }
   return material;
 }
@@ -315,7 +373,9 @@ export function createOutlineMesh(mesh) {
   const sizeKey = `${size.x.toFixed(2)}_${size.y.toFixed(2)}_${size.z.toFixed(2)}`;
   let geo = _outlineGeoCache.get(sizeKey);
   if (!geo) {
-    geo = new THREE.EdgesGeometry(new THREE.BoxGeometry(size.x, size.y, size.z));
+    geo = new THREE.EdgesGeometry(
+      new THREE.BoxGeometry(size.x, size.y, size.z),
+    );
     geo.translate(0, size.y / 2, 0);
     _outlineGeoCache.set(sizeKey, geo);
     if (_outlineGeoCache.size > MODEL_CACHE_LIMITS.outline) {

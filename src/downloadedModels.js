@@ -1,9 +1,9 @@
-import { blueprintToModelInfo, fetchWithTimeout } from './catalogApi.js';
-import { generateModelId, registerModelId } from './modelCatalog.js';
-import { notify } from './notifications.js';
-import { getStorageItem, setStorageItem } from './storage.js';
-const STORAGE_KEY = 'openforge-downloaded-models';
-const CATALOG_THUMB_CACHE_KEY = 'openforge-catalog-thumb-cache';
+import { blueprintToModelInfo, fetchWithTimeout } from "./catalogApi.js";
+import { generateModelId, registerModelId } from "./modelCatalog.js";
+import { notify } from "./notifications.js";
+import { getStorageItem, setStorageItem } from "./storage.js";
+const STORAGE_KEY = "openforge-downloaded-models";
+const CATALOG_THUMB_CACHE_KEY = "openforge-catalog-thumb-cache";
 
 const downloadCache = new Map();
 let manifest = [];
@@ -11,12 +11,15 @@ let manifest = [];
 let manifestByFileName = new Map();
 
 function reindexManifest() {
-  manifestByFileName = new Map(manifest.map(m => [m.fileName, m]));
+  manifestByFileName = new Map(manifest.map((m) => [m.fileName, m]));
 }
 
 function safeEncode(str) {
-  const value = String(str || '');
-  const encoded = value.replace(/[^a-zA-Z0-9.-]/g, c => '_' + c.charCodeAt(0).toString(16).padStart(2, '0'));
+  const value = String(str || "");
+  const encoded = value.replace(
+    /[^a-zA-Z0-9.-]/g,
+    (c) => "_" + c.charCodeAt(0).toString(16).padStart(2, "0"),
+  );
   if (encoded.length <= 180) return encoded;
 
   let hash = 2166136261;
@@ -24,7 +27,7 @@ function safeEncode(str) {
     hash ^= value.charCodeAt(i);
     hash = Math.imul(hash, 16777619);
   }
-  const suffix = `_${(hash >>> 0).toString(16).padStart(8, '0')}`;
+  const suffix = `_${(hash >>> 0).toString(16).padStart(8, "0")}`;
   return `${encoded.slice(0, 180 - suffix.length)}${suffix}`;
 }
 
@@ -46,14 +49,16 @@ function isValidStlBinary(buffer) {
   const view = new DataView(buffer);
   const triCount = view.getUint32(80, true);
   if (triCount === 0 || triCount > STL_MAX_TRIANGLES) return false;
-  return buffer.byteLength === STL_HEADER_SIZE + triCount * STL_BYTES_PER_TRIANGLE;
+  return (
+    buffer.byteLength === STL_HEADER_SIZE + triCount * STL_BYTES_PER_TRIANGLE
+  );
 }
 
 function isValidStl(buffer) {
   if (isValidStlBinary(buffer)) return true;
   const head = new Uint8Array(buffer.slice(0, 512));
-  const text = new TextDecoder('ascii', { fatal: false }).decode(head);
-  if (text.startsWith('solid') && text.includes('facet')) return true;
+  const text = new TextDecoder("ascii", { fatal: false }).decode(head);
+  if (text.startsWith("solid") && text.includes("facet")) return true;
   return false;
 }
 
@@ -69,22 +74,29 @@ async function cacheThumbnail(safeName, thumbnailUrl) {
   if (!thumbnailUrl) return false;
   try {
     let url = thumbnailUrl;
-    if (url.startsWith('https://objects.openforge.tools/')) {
-      url = '/catalog-objects' + url.replace('https://objects.openforge.tools', '');
+    if (url.startsWith("https://objects.openforge.tools/")) {
+      url =
+        "/catalog-objects" + url.replace("https://objects.openforge.tools", "");
     }
     const resp = await fetchWithTimeout(url, {}, 30000);
     if (!resp.ok) return false;
     const buf = await resp.arrayBuffer();
-    const postResp = await fetchWithTimeout(`/downloaded/thumbs/${safeName}.png`, {
-      method: 'POST',
-      body: new Uint8Array(buf),
-    }, 30000);
+    const postResp = await fetchWithTimeout(
+      `/downloaded/thumbs/${safeName}.png`,
+      {
+        method: "POST",
+        body: new Uint8Array(buf),
+      },
+      30000,
+    );
     return postResp.ok;
-  } catch (e) { return false; }
+  } catch (e) {
+    return false;
+  }
 }
 
 export function getThumbnailUrl(_id) {
-  const entry = manifest.find(m => m._id === _id);
+  const entry = manifest.find((m) => m._id === _id);
   if (!entry) return null;
   if (entry.hasThumb) return thumbPath(thumbNameForEntry(entry));
   return entry?.modelInfo?.thumbnailUrl || null;
@@ -93,10 +105,10 @@ export function getThumbnailUrl(_id) {
 const catalogThumbSeen = new Set();
 function loadCatalogThumbCache() {
   try {
-    const cached = JSON.parse(getStorageItem(CATALOG_THUMB_CACHE_KEY, '[]'));
+    const cached = JSON.parse(getStorageItem(CATALOG_THUMB_CACHE_KEY, "[]"));
     return Array.isArray(cached) ? cached : [];
   } catch (e) {
-    console.warn('Failed to read cached catalog thumbnail list:', e);
+    console.warn("Failed to read cached catalog thumbnail list:", e);
     return [];
   }
 }
@@ -105,12 +117,15 @@ const catalogThumbCached = new Set(loadCatalogThumbCache());
 
 function rememberCatalogThumb(key) {
   catalogThumbCached.add(key);
-  setStorageItem(CATALOG_THUMB_CACHE_KEY, JSON.stringify([...catalogThumbCached]));
+  setStorageItem(
+    CATALOG_THUMB_CACHE_KEY,
+    JSON.stringify([...catalogThumbCached]),
+  );
 }
 
 function thumbKeyForImageUrl(imageUrl) {
-  const m = (imageUrl || '').match(/([0-9a-f]{32})\.png$/i);
-  return m ? m[1].toLowerCase() : safeEncode(imageUrl || 'thumb');
+  const m = (imageUrl || "").match(/([0-9a-f]{32})\.png$/i);
+  return m ? m[1].toLowerCase() : safeEncode(imageUrl || "thumb");
 }
 
 export function ensureCatalogThumbCached(imageUrl) {
@@ -121,23 +136,33 @@ export function ensureCatalogThumbCached(imageUrl) {
   catalogThumbSeen.add(key);
   (async () => {
     try {
-      const head = await fetchWithTimeout(local, { method: 'HEAD' }, 15000);
+      const head = await fetchWithTimeout(local, { method: "HEAD" }, 15000);
       if (head.ok) {
         rememberCatalogThumb(key);
         return;
       }
-    } catch (e) { /* fall through to cache it */ }
+    } catch (e) {
+      /* fall through to cache it */
+    }
     try {
       let url = imageUrl;
-      if (url.startsWith('https://objects.openforge.tools/')) {
-        url = '/catalog-objects' + url.replace('https://objects.openforge.tools', '');
+      if (url.startsWith("https://objects.openforge.tools/")) {
+        url =
+          "/catalog-objects" +
+          url.replace("https://objects.openforge.tools", "");
       }
       const resp = await fetchWithTimeout(url, {}, 30000);
       if (!resp.ok) return;
       const buf = await resp.arrayBuffer();
-      const saved = await fetchWithTimeout(local, { method: 'POST', body: new Uint8Array(buf) }, 30000);
+      const saved = await fetchWithTimeout(
+        local,
+        { method: "POST", body: new Uint8Array(buf) },
+        30000,
+      );
       if (saved.ok) rememberCatalogThumb(key);
-    } catch (e) { /* best effort */ }
+    } catch (e) {
+      /* best effort */
+    }
   })();
   return local;
 }
@@ -152,10 +177,12 @@ export function initDownloadedModels() {
     manifest = [];
   }
 
-  manifest = manifest.filter(entry => entry && entry._id && entry.fileName && entry.modelInfo);
+  manifest = manifest.filter(
+    (entry) => entry && entry._id && entry.fileName && entry.modelInfo,
+  );
 
   const seenFileNames = new Set();
-  manifest = manifest.filter(entry => {
+  manifest = manifest.filter((entry) => {
     if (seenFileNames.has(entry.fileName)) return false;
     seenFileNames.add(entry.fileName);
     return true;
@@ -167,8 +194,13 @@ export function initDownloadedModels() {
 
   let migrated = false;
   for (const entry of manifest) {
-    if (!entry._id) entry._id = generateModelId(entry.fileName, entry.sha || entry.modelInfo?.sha);
-    if (entry.modelInfo && !entry.modelInfo._id) entry.modelInfo._id = entry._id;
+    if (!entry._id)
+      entry._id = generateModelId(
+        entry.fileName,
+        entry.sha || entry.modelInfo?.sha,
+      );
+    if (entry.modelInfo && !entry.modelInfo._id)
+      entry.modelInfo._id = entry._id;
     if (!entry.safeName) {
       entry.safeName = safeEncode(entry._id);
       entry.hasThumb = false;
@@ -176,31 +208,70 @@ export function initDownloadedModels() {
     }
     if (!entry.hasThumb && entry.modelInfo?.thumbnailUrl) {
       const tn = thumbNameForEntry(entry);
-      cacheThumbnail(tn, entry.modelInfo.thumbnailUrl).then(ok => {
-        if (ok) { entry.hasThumb = true; saveManifest(); }
+      cacheThumbnail(tn, entry.modelInfo.thumbnailUrl).then((ok) => {
+        if (ok) {
+          entry.hasThumb = true;
+          saveManifest();
+        }
       });
     } else if (entry.hasThumb) {
       const tn = thumbNameForEntry(entry);
-      fetchWithTimeout(thumbPath(tn), { method: 'HEAD' }, 15000).then(r => {
-        if (r.ok) return;
-        const oldTn = safeEncode(entry.fileName);
-        if (oldTn === tn) { entry.hasThumb = false; return; }
-        fetchWithTimeout(thumbPath(oldTn), {}, 15000).then(r2 => {
-          if (!r2.ok) { entry.hasThumb = false; return; }
-          r2.arrayBuffer().then(buf => {
-            fetchWithTimeout(thumbPath(tn), { method: 'POST', body: new Uint8Array(buf) }, 30000).then(r3 => {
-              if (!r3.ok) { entry.hasThumb = false; }
-            }).catch(e => { console.warn(`Failed to migrate thumbnail for "${entry.fileName}":`, e); entry.hasThumb = false; });
-          });
-        }).catch(e => { console.warn(`Failed to fetch legacy thumbnail for "${entry.fileName}":`, e); entry.hasThumb = false; });
-      }).catch(e => { console.warn(`Failed to verify thumbnail for "${entry.fileName}":`, e); });
+      fetchWithTimeout(thumbPath(tn), { method: "HEAD" }, 15000)
+        .then((r) => {
+          if (r.ok) return;
+          const oldTn = safeEncode(entry.fileName);
+          if (oldTn === tn) {
+            entry.hasThumb = false;
+            return;
+          }
+          fetchWithTimeout(thumbPath(oldTn), {}, 15000)
+            .then((r2) => {
+              if (!r2.ok) {
+                entry.hasThumb = false;
+                return;
+              }
+              r2.arrayBuffer().then((buf) => {
+                fetchWithTimeout(
+                  thumbPath(tn),
+                  { method: "POST", body: new Uint8Array(buf) },
+                  30000,
+                )
+                  .then((r3) => {
+                    if (!r3.ok) {
+                      entry.hasThumb = false;
+                    }
+                  })
+                  .catch((e) => {
+                    console.warn(
+                      `Failed to migrate thumbnail for "${entry.fileName}":`,
+                      e,
+                    );
+                    entry.hasThumb = false;
+                  });
+              });
+            })
+            .catch((e) => {
+              console.warn(
+                `Failed to fetch legacy thumbnail for "${entry.fileName}":`,
+                e,
+              );
+              entry.hasThumb = false;
+            });
+        })
+        .catch((e) => {
+          console.warn(
+            `Failed to verify thumbnail for "${entry.fileName}":`,
+            e,
+          );
+        });
     }
   }
 
   if (migrated) saveManifest();
 
   for (const entry of manifest) {
-    const sha = entry.sha || entry.modelInfo?.sha || extractMd5FromUrl(entry.storageUrl);
+    const sha =
+      entry.sha || entry.modelInfo?.sha || extractMd5FromUrl(entry.storageUrl);
     if (!sha || !entry.modelInfo) continue;
     if (!entry.sha) {
       entry.sha = sha;
@@ -228,9 +299,9 @@ export function saveManifest() {
     if (!manifestQuotaWarned) {
       manifestQuotaWarned = true;
       console.warn(
-        'Failed to save downloaded-models manifest — browser storage is full. ' +
-        'Imported-model bookkeeping may be lost on refresh.',
-        e
+        "Failed to save downloaded-models manifest — browser storage is full. " +
+          "Imported-model bookkeeping may be lost on refresh.",
+        e,
       );
     }
   }
@@ -239,25 +310,31 @@ export function saveManifest() {
 export function syncMetadataToServer(modelInfo) {
   const sha = modelInfo?.sha;
   if (!sha) return;
-  fetchWithTimeout(`/metadata/${sha}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(modelInfo),
-  }, 15000).catch(() => {});
+  fetchWithTimeout(
+    `/metadata/${sha}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(modelInfo),
+    },
+    15000,
+  ).catch(() => {});
 }
 
 export async function hydrateMetadataFromServer() {
   const empty = { added: [], pruned: [] };
   let items;
   try {
-    const resp = await fetchWithTimeout('/metadata', {}, 30000);
+    const resp = await fetchWithTimeout("/metadata", {}, 30000);
     if (!resp.ok) return empty;
     items = await resp.json();
   } catch (e) {
     return empty;
   }
   if (!Array.isArray(items)) return empty;
-  const serverRows = new Map(items.filter(i => i && i.sha).map(i => [i.sha, i]));
+  const serverRows = new Map(
+    items.filter((i) => i && i.sha).map((i) => [i.sha, i]),
+  );
   // Guard: never prune against an empty/errored DB snapshot.
   const healthyDb = items.length > 0;
 
@@ -283,7 +360,7 @@ export async function hydrateMetadataFromServer() {
           ...m.modelInfo,
           ...metadata,
           _id: m._id,
-          source: 'downloaded',
+          source: "downloaded",
         };
         metadataChanged = true;
       }
@@ -302,8 +379,8 @@ export async function hydrateMetadataFromServer() {
     saveManifest();
   }
 
-  const haveSha = new Set(manifest.map(m => m.sha).filter(Boolean));
-  const haveId = new Set(manifest.map(m => m._id));
+  const haveSha = new Set(manifest.map((m) => m.sha).filter(Boolean));
+  const haveId = new Set(manifest.map((m) => m._id));
   const added = [];
   for (const info of items) {
     if (!info || !info.sha || !info.fileName) continue;
@@ -320,7 +397,7 @@ export async function hydrateMetadataFromServer() {
       stlName: stlName(rest.sha) || safe,
       catalogId: rest.catalogId || null,
       storageUrl: rest.storageUrl || null,
-      modelInfo: { ...rest, _id, source: 'downloaded' },
+      modelInfo: { ...rest, _id, source: "downloaded" },
       savedToDisk: stl_cached === true,
       importedAt: Date.now(),
     };
@@ -337,7 +414,7 @@ export async function hydrateMetadataFromServer() {
 
 export async function importBlueprint(blueprint, stlArrayBuffer) {
   const fileName = blueprint.file_name || blueprint.blueprint_name;
-  if (!fileName) throw new Error('Blueprint has no filename');
+  if (!fileName) throw new Error("Blueprint has no filename");
 
   const modelInfo = blueprint.modelInfo || blueprintToModelInfo(blueprint);
   const sha = blueprint.file_md5 || modelInfo.sha || null;
@@ -357,24 +434,31 @@ export async function importBlueprint(blueprint, stlArrayBuffer) {
   downloadCache.set(entry._id, { cachedAt: Date.now() });
 
   try {
-    const resp = await fetchWithTimeout(`/downloaded/${entry.stlName}`, {
-      method: 'POST',
-      body: new Uint8Array(stlArrayBuffer),
-    }, 120000);
+    const resp = await fetchWithTimeout(
+      `/downloaded/${entry.stlName}`,
+      {
+        method: "POST",
+        body: new Uint8Array(stlArrayBuffer),
+      },
+      120000,
+    );
     if (resp.ok) entry.savedToDisk = true;
   } catch (e) {
-    console.warn('Failed to save STL to disk:', e);
-    notify(`Could not save ${fileName} to local storage. It may need to be downloaded again.`);
+    console.warn("Failed to save STL to disk:", e);
+    notify(
+      `Could not save ${fileName} to local storage. It may need to be downloaded again.`,
+    );
   }
 
   // Dedup by identity (content sha) or filename: re-importing replaces the
   // old entry instead of minting a second identity for the same model.
   // Layout tiles referencing a superseded _id still resolve via the
   // fileName fallback in _loadFromData / resolveTemplateTiles.
-  const existing = manifest.findIndex(m =>
-    m._id === entry._id ||
-    (sha && (m.sha === sha || m.modelInfo?.sha === sha)) ||
-    (fileName && m.fileName === fileName)
+  const existing = manifest.findIndex(
+    (m) =>
+      m._id === entry._id ||
+      (sha && (m.sha === sha || m.modelInfo?.sha === sha)) ||
+      (fileName && m.fileName === fileName),
   );
   if (existing >= 0) {
     manifest[existing] = entry;
@@ -388,8 +472,11 @@ export async function importBlueprint(blueprint, stlArrayBuffer) {
   if (entry.sha) syncMetadataToServer({ ...modelInfo, sha: entry.sha });
   const thumbUrl = blueprint.images?.[0]?.image_url;
   if (thumbUrl) {
-    cacheThumbnail(thumbNameForEntry(entry), thumbUrl).then(ok => {
-      if (ok) { entry.hasThumb = true; saveManifest(); }
+    cacheThumbnail(thumbNameForEntry(entry), thumbUrl).then((ok) => {
+      if (ok) {
+        entry.hasThumb = true;
+        saveManifest();
+      }
     });
   }
   return modelInfo;
@@ -400,11 +487,13 @@ export function isDownloaded(fileName) {
 }
 
 export function getDownloadedModels() {
-  return manifest.filter(m => m.modelInfo?.fileName).map(m => ({ ...m.modelInfo, source: 'downloaded' }));
+  return manifest
+    .filter((m) => m.modelInfo?.fileName)
+    .map((m) => ({ ...m.modelInfo, source: "downloaded" }));
 }
 
 export function removeDownloaded(_id) {
-  const entry = manifest.find(m => m._id === _id);
+  const entry = manifest.find((m) => m._id === _id);
   const fileName = entry?.fileName;
   const sha = entry?.sha;
   const cached = downloadCache.get(_id);
@@ -413,14 +502,16 @@ export function removeDownloaded(_id) {
     downloadCache.delete(_id);
   }
   if (fileName) {
-    manifest = manifest.filter(m => m.fileName !== fileName);
+    manifest = manifest.filter((m) => m.fileName !== fileName);
   } else {
-    manifest = manifest.filter(m => m._id !== _id);
+    manifest = manifest.filter((m) => m._id !== _id);
   }
   reindexManifest();
   saveManifest();
   if (sha) {
-    fetchWithTimeout(`/metadata/${sha}`, { method: 'DELETE' }, 15000).catch(() => {});
+    fetchWithTimeout(`/metadata/${sha}`, { method: "DELETE" }, 15000).catch(
+      () => {},
+    );
   }
 }
 
@@ -430,10 +521,17 @@ export function getManifest() {
 
 export function addDownloadedModelEntry(modelInfo) {
   if (!modelInfo || !modelInfo.fileName) return null;
-  const existing = manifest.find(m => m.fileName === modelInfo.fileName || m._id === modelInfo._id);
+  const existing = manifest.find(
+    (m) => m.fileName === modelInfo.fileName || m._id === modelInfo._id,
+  );
   if (existing) return existing;
 
-  const _id = modelInfo._id || generateModelId(modelInfo.fileName, modelInfo.sha || modelInfo.modelInfo?.sha);
+  const _id =
+    modelInfo._id ||
+    generateModelId(
+      modelInfo.fileName,
+      modelInfo.sha || modelInfo.modelInfo?.sha,
+    );
   const entry = {
     _id,
     fileName: modelInfo.fileName,
@@ -442,7 +540,7 @@ export function addDownloadedModelEntry(modelInfo) {
     stlName: stlName(modelInfo.sha) || safeEncode(_id),
     storageUrl: modelInfo.storageUrl || null,
     catalogId: modelInfo.catalogId || null,
-    modelInfo: { ...modelInfo, _id, source: 'downloaded' },
+    modelInfo: { ...modelInfo, _id, source: "downloaded" },
     savedToDisk: false,
     importedAt: Date.now(),
   };
@@ -461,9 +559,9 @@ export function ensureCached(_id, modelInfo, buffer) {
 
   const fileName = modelInfo.fileName || _id;
   const safeName = safeEncode(_id);
-  let entry = manifest.find(m => m._id === _id);
+  let entry = manifest.find((m) => m._id === _id);
   if (!entry) {
-    const fullInfo = { ...modelInfo, _id, source: 'downloaded' };
+    const fullInfo = { ...modelInfo, _id, source: "downloaded" };
     entry = {
       _id,
       fileName,
@@ -486,7 +584,7 @@ export function ensureCached(_id, modelInfo, buffer) {
     entry.stlName = stlName(modelInfo.sha) || entry.stlName;
   }
   if (!entry.modelInfo || !entry.modelInfo.displayName) {
-    entry.modelInfo = { ...modelInfo, _id, source: 'downloaded' };
+    entry.modelInfo = { ...modelInfo, _id, source: "downloaded" };
   } else {
     entry.modelInfo.storageUrl = entry.storageUrl;
     if (modelInfo.sha) entry.modelInfo.sha = modelInfo.sha;
@@ -494,8 +592,12 @@ export function ensureCached(_id, modelInfo, buffer) {
   saveManifest();
   if (entry.modelInfo?.sha) syncMetadataToServer(entry.modelInfo);
 
-  fetchWithTimeout(`/downloaded/${entry.stlName || entry.safeName}`, {
-    method: 'POST',
-    body: new Uint8Array(buffer),
-  }, 120000).catch(() => {});
+  fetchWithTimeout(
+    `/downloaded/${entry.stlName || entry.safeName}`,
+    {
+      method: "POST",
+      body: new Uint8Array(buffer),
+    },
+    120000,
+  ).catch(() => {});
 }

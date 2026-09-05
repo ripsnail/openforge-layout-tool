@@ -1,7 +1,7 @@
-import { THEME_LABELS } from './modelCatalog.js';
-import { setStorageItem } from './storage.js';
+import { THEME_LABELS } from "./modelCatalog.js";
+import { setStorageItem } from "./storage.js";
 
-const THEME_COLOR_OVERRIDES_KEY = 'openforge-theme-color-overrides';
+const THEME_COLOR_OVERRIDES_KEY = "openforge-theme-color-overrides";
 
 let themeColorOverrides = {};
 
@@ -15,19 +15,23 @@ export function initSettings() {
 }
 
 function saveOverrides() {
-  setStorageItem(THEME_COLOR_OVERRIDES_KEY, JSON.stringify(themeColorOverrides));
+  setStorageItem(
+    THEME_COLOR_OVERRIDES_KEY,
+    JSON.stringify(themeColorOverrides),
+  );
 }
 
 export function getThemeColorOverride(theme) {
   if (!theme) return null;
   if (themeColorOverrides[theme]) return themeColorOverrides[theme];
   const base = theme.split(/[+%_]/)[0];
-  if (base && base !== theme && themeColorOverrides[base]) return themeColorOverrides[base];
+  if (base && base !== theme && themeColorOverrides[base])
+    return themeColorOverrides[base];
   return null;
 }
 
 export function setThemeColorOverride(theme, hexOrNull) {
-  if (hexOrNull === null || hexOrNull === undefined || hexOrNull === '') {
+  if (hexOrNull === null || hexOrNull === undefined || hexOrNull === "") {
     delete themeColorOverrides[theme];
   } else {
     themeColorOverrides[theme] = hexOrNull;

@@ -1,6 +1,6 @@
 # OpenForge Layout Tool
 
-A browser-based 3D layout tool for arranging OpenForge STL models, saving layouts, and exporting them for later use.
+A browser-based 3D layout tool for arranging OpenForge STL models, saving layouts, and exporting them for sharing.
 
 ## Recommended setup: Docker
 
@@ -58,7 +58,7 @@ A local installation is available if Docker is not suitable.
 
 - Node.js 24 or newer
 - npm
-- A modern browser with WebGL support
+- Browser with WebGL support
 - Network access to the configured catalog endpoints
 - Write access to the project’s `downloaded/` directory, which stores locally downloaded models and metadata
 
@@ -113,28 +113,3 @@ Downloaded models and layout metadata are cached locally. The `downloaded/` dire
 - `downloaded/` is runtime storage and should remain writable when running the application.
 
 The development server includes request validation, path traversal protection, request-size limits, and same-origin checks for state-changing local cache operations. It is intended for development and trusted local-network use; put a separately configured production server or reverse proxy in front of it for production hosting.
-
-## Troubleshooting
-
-### Port 5173 is already in use
-
-Stop the process using port 5173, or run the application with a different Vite configuration/port.
-
-### Models do not load
-
-Check that:
-
-- The browser supports WebGL.
-- The catalog endpoint variables point to reachable services.
-- The container or local process can write to `downloaded/`.
-- The browser console and in-app notifications do not report a failed model or catalog request.
-
-### Docker changes are not appearing
-
-Rebuild the image after dependency or Dockerfile changes:
-
-```sh
-docker compose up --build
-```
-
-Source files are mounted into the container, so normal files under `src/`, `public/`, and `index.html` are available without rebuilding the image.

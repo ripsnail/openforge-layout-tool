@@ -1,13 +1,41 @@
-import * as THREE from 'three';
-import { loadModelGeometry, createMesh, createGhostMesh, createOutlineMesh, recolorMesh, disposeMeshMaterial, pruneGeometries } from './modelLoader.js';
-import { isWallTile, isBaseTile, isColumnTile, isWallBaseTile, getTileFootprintMm, getThemeColor, TEXTURE_OPTIONS, getTextureOverride, setTextureOverride, getEffectiveTextureTags, formatTextureTag } from './modelCatalog.js';
-import { UndoRedoManager, PlaceCommand, RemoveCommand, MoveCommand, RotateCommand, GroupRotateCommand, BatchCommand } from './undoRedo.js';
-import { getManifest, addDownloadedModelEntry } from './downloadedModels.js';
-import { resolveTemplateTiles } from './templates.js';
-import { saveFileData, loadFileData, getActiveId } from './fileManager.js';
-import { fetchWithTimeout } from './catalogApi.js';
-import { updateBom, updateModelCount } from './placementUi.js';
-import { notify } from './notifications.js';
+import * as THREE from "three";
+import {
+  loadModelGeometry,
+  createMesh,
+  createGhostMesh,
+  createOutlineMesh,
+  recolorMesh,
+  disposeMeshMaterial,
+  pruneGeometries,
+} from "./modelLoader.js";
+import {
+  isWallTile,
+  isBaseTile,
+  isColumnTile,
+  isWallBaseTile,
+  getTileFootprintMm,
+  getThemeColor,
+  TEXTURE_OPTIONS,
+  getTextureOverride,
+  setTextureOverride,
+  getEffectiveTextureTags,
+  formatTextureTag,
+} from "./modelCatalog.js";
+import {
+  UndoRedoManager,
+  PlaceCommand,
+  RemoveCommand,
+  MoveCommand,
+  RotateCommand,
+  GroupRotateCommand,
+  BatchCommand,
+} from "./undoRedo.js";
+import { getManifest, addDownloadedModelEntry } from "./downloadedModels.js";
+import { resolveTemplateTiles } from "./templates.js";
+import { saveFileData, loadFileData, getActiveId } from "./fileManager.js";
+import { fetchWithTimeout } from "./catalogApi.js";
+import { updateBom, updateModelCount } from "./placementUi.js";
+import { notify } from "./notifications.js";
 
 const INCH = 25.4;
 const QUARTER_INCH = INCH / 4;
@@ -29,7 +57,7 @@ export class PlacementSystem {
     this.selectedMeshes = [];
     this.outlineMeshes = [];
     this.placedMeshes = [];
-    this.currentTool = 'select';
+    this.currentTool = "select";
 
     this.undoRedo = new UndoRedoManager(() => this._pruneUnusedGeometries());
     this._clipboard = [];
@@ -94,18 +122,18 @@ export class PlacementSystem {
   }
 
   _setupEvents() {
-    const target = document.querySelector('#viewport');
+    const target = document.querySelector("#viewport");
     if (!target) return;
-    target.addEventListener('pointerdown', this._onPointerDown);
-    target.addEventListener('pointermove', this._onPointerMove);
-    target.addEventListener('pointerup', this._onPointerUp);
-    target.addEventListener('contextmenu', this._onContextMenu);
-    window.addEventListener('keydown', this._onKeyDown);
+    target.addEventListener("pointerdown", this._onPointerDown);
+    target.addEventListener("pointermove", this._onPointerMove);
+    target.addEventListener("pointerup", this._onPointerUp);
+    target.addEventListener("contextmenu", this._onContextMenu);
+    window.addEventListener("keydown", this._onKeyDown);
   }
 
   setTool(tool) {
     this.currentTool = tool;
-    if (tool !== 'place') {
+    if (tool !== "place") {
       this._clearGhost();
       this._clearTemplateGhosts();
       this.activeTemplate = null;
@@ -132,17 +160,19 @@ export class PlacementSystem {
     this._pendingPlaceHeight = 0;
 
     if (modelInfo) {
-      loadModelGeometry(modelInfo).then(geo => {
-        this.activeGeometry = geo;
-        if (this.currentTool === 'place' || this.currentTool === 'select') {
-          this.currentTool = 'place';
-          this._updateToolbar();
-        }
-        this.updateInfo();
-      }).catch(err => {
-        console.error('Failed to load model:', err);
-        this.activeModel = null;
-      });
+      loadModelGeometry(modelInfo)
+        .then((geo) => {
+          this.activeGeometry = geo;
+          if (this.currentTool === "place" || this.currentTool === "select") {
+            this.currentTool = "place";
+            this._updateToolbar();
+          }
+          this.updateInfo();
+        })
+        .catch((err) => {
+          console.error("Failed to load model:", err);
+          this.activeModel = null;
+        });
     } else {
       this.updateInfo();
     }
@@ -157,18 +187,21 @@ export class PlacementSystem {
     this.templateTiles = [];
     this._pendingPlaceRotation = 0;
     this._pendingPlaceHeight = 0;
-    this.setTool('place');
+    this.setTool("place");
     this._updateToolbar();
 
-    const el = document.getElementById('tool-info');
+    const el = document.getElementById("tool-info");
     if (el) el.textContent = `Loading template: ${template.name}…`;
 
     const resolved = await resolveTemplateTiles(template);
     if (resolved.length < template.tiles.length) {
-      notify(`${template.tiles.length - resolved.length} of ${template.tiles.length} template tiles could not be loaded.`);
+      notify(
+        `${template.tiles.length - resolved.length} of ${template.tiles.length} template tiles could not be loaded.`,
+      );
     }
     if (resolved.length === 0) {
-      if (el) el.textContent = `Template "${template.name}" has no loadable models — import them from the catalog first  |  Esc to cancel`;
+      if (el)
+        el.textContent = `Template "${template.name}" has no loadable models — import them from the catalog first  |  Esc to cancel`;
       return false;
     }
 
@@ -185,8 +218,9 @@ export class PlacementSystem {
         newGhosts.push(ghost);
       }
     } catch (e) {
-      console.error('Failed to build template ghost meshes:', e);
-      if (el) el.textContent = `Failed to prepare template "${template.name}"  |  Esc to cancel`;
+      console.error("Failed to build template ghost meshes:", e);
+      if (el)
+        el.textContent = `Failed to prepare template "${template.name}"  |  Esc to cancel`;
       return false;
     }
 
@@ -220,16 +254,23 @@ export class PlacementSystem {
       const pos = new THREE.Vector3(
         anchorPos.x + dx * cos + dz * sin,
         anchorPos.y + ((tile.y || 0) - (anchorTile.y || 0)),
-        anchorPos.z - dx * sin + dz * cos
+        anchorPos.z - dx * sin + dz * cos,
       );
       const rotY = (tile.ry || 0) + groupRot;
-      transforms.push({ tile, modelInfo, geometry, pos, rot: { x: tile.rx || 0, y: rotY, z: tile.rz || 0 } });
+      transforms.push({
+        tile,
+        modelInfo,
+        geometry,
+        pos,
+        rot: { x: tile.rx || 0, y: rotY, z: tile.rz || 0 },
+      });
     }
     return transforms;
   }
 
   _layoutTemplateGhosts(anchorPos, groupRot) {
-    if (this.templateTiles.length === 0 || this.templateGhosts.length === 0) return;
+    if (this.templateTiles.length === 0 || this.templateGhosts.length === 0)
+      return;
     const lifted = anchorPos.clone();
     lifted.y += this._pendingPlaceHeight;
     const anchorTile = this.templateTiles[0].tile;
@@ -267,31 +308,46 @@ export class PlacementSystem {
   }
 
   updateInfo() {
-    const el = document.getElementById('tool-info');
+    const el = document.getElementById("tool-info");
     if (!el) return;
-    if (this.currentTool === 'place' && this.activeTemplate && this.templateGhosts.length > 0) {
+    if (
+      this.currentTool === "place" &&
+      this.activeTemplate &&
+      this.templateGhosts.length > 0
+    ) {
       el.textContent = `Placing template: ${this.activeTemplate.name} — ${this.templateGhosts.length} tiles  |  Click to place, [R] rotate  [PgUp/PgDn] adjust height  [Esc] to cancel`;
-    } else if (this.currentTool === 'place' && this.activeModel) {
-      const snapType = this.pendingSnap?.type || 'grid';
-      const snapLabel = snapType === 'on-base' ? 'on base' :
-                        snapType === 'on-secret-door-bottom' ? 'on door' :
-                        snapType === 'blocked' ? 'blocked' :
-                        snapType === 'free' ? 'free' :
-                        'grid';
-      const rotDeg = Math.round((this._pendingPlaceRotation / Math.PI * 180) % 360);
-      const rotLabel = rotDeg !== 0 ? ` [R] ${rotDeg}°` : '';
+    } else if (this.currentTool === "place" && this.activeModel) {
+      const snapType = this.pendingSnap?.type || "grid";
+      const snapLabel =
+        snapType === "on-base"
+          ? "on base"
+          : snapType === "on-secret-door-bottom"
+            ? "on door"
+            : snapType === "blocked"
+              ? "blocked"
+              : snapType === "free"
+                ? "free"
+                : "grid";
+      const rotDeg = Math.round(
+        ((this._pendingPlaceRotation / Math.PI) * 180) % 360,
+      );
+      const rotLabel = rotDeg !== 0 ? ` [R] ${rotDeg}°` : "";
       el.textContent = `Placing: ${this.activeModel.displayName} — ${snapLabel}${rotLabel} [PgUp/PgDn] adjust height  |  Esc to cancel`;
-    } else if (this.currentTool === 'select' && this.selectedMeshes.length > 0) {
+    } else if (
+      this.currentTool === "select" &&
+      this.selectedMeshes.length > 0
+    ) {
       if (this.selectedMeshes.length === 1) {
         const info = this.selectedMeshes[0].userData.modelInfo || {};
-        el.textContent = `Selected: ${info.displayName || 'model'}  |  [R] Rotate  [X/Z] tilt  (Shift=45°)  [Del] Delete  [Ctrl+C] Copy  |  [Arrows/PgUp/PgDn] move (Shift=1/8")  |  Esc to deselect`;
+        el.textContent = `Selected: ${info.displayName || "model"}  |  [R] Rotate  [X/Z] tilt  (Shift=45°)  [Del] Delete  [Ctrl+C] Copy  |  [Arrows/PgUp/PgDn] move (Shift=1/8")  |  Esc to deselect`;
       } else {
         el.textContent = `${this.selectedMeshes.length} selected  |  [R] Rotate  [X/Z] tilt  (Shift=45°)  [Del] Delete  [Ctrl+C] Copy  |  [Arrows/PgUp/PgDn] move (Shift=1/8")  |  Esc to deselect`;
       }
-    } else if (this.currentTool === 'delete') {
-      el.textContent = 'Click a model to delete it  |  Esc to cancel';
+    } else if (this.currentTool === "delete") {
+      el.textContent = "Click a model to delete it  |  Esc to cancel";
     } else {
-      el.textContent = 'Select a model from the palette to start  |  [Q] Select  [W] Place  [D] Delete';
+      el.textContent =
+        "Select a model from the palette to start  |  [Q] Select  [W] Place  [D] Delete";
     }
     this._requestRenderFrame();
   }
@@ -307,17 +363,18 @@ export class PlacementSystem {
   }
 
   _updateToolbar() {
-    const buttons = this._toolbarButtons || document.querySelectorAll('.tool-btn');
-    buttons.forEach(btn => {
-      btn.classList.toggle('active', btn.dataset.tool === this.currentTool);
+    const buttons =
+      this._toolbarButtons || document.querySelectorAll(".tool-btn");
+    buttons.forEach((btn) => {
+      btn.classList.toggle("active", btn.dataset.tool === this.currentTool);
     });
   }
 
   setToolbarButtons(buttons) {
     this._toolbarButtons = buttons;
-    buttons.forEach(btn => {
+    buttons.forEach((btn) => {
       if (!btn.dataset.tool) return;
-      btn.addEventListener('click', () => {
+      btn.addEventListener("click", () => {
         this.setTool(btn.dataset.tool);
         this._updateToolbar();
       });
@@ -325,10 +382,11 @@ export class PlacementSystem {
   }
 
   _onPointerDown(e) {
-    if (this._contextMesh && !e.target.closest('#context-menu')) {
+    if (this._contextMesh && !e.target.closest("#context-menu")) {
       this._hideContextMenu();
     }
-    if (e.target.closest('#toolbar') || e.target.closest('.dropdown-menu')) return;
+    if (e.target.closest("#toolbar") || e.target.closest(".dropdown-menu"))
+      return;
 
     const rect = e.currentTarget.getBoundingClientRect();
     this.pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
@@ -339,34 +397,50 @@ export class PlacementSystem {
       this._clearTemplateGhosts();
       this.activeTemplate = null;
       this.templateTiles = [];
-      
+
       return;
     }
 
     this.raycaster.setFromCamera(this.pointer, this.camera);
 
-    if (this.currentTool === 'place' && this.activeTemplate && this.templateTiles.length > 0) {
+    if (
+      this.currentTool === "place" &&
+      this.activeTemplate &&
+      this.templateTiles.length > 0
+    ) {
       const intersectPoint = this._getGroundIntersect();
       if (intersectPoint) {
         const anchorInfo = this.templateTiles[0].modelInfo;
-        const snap = this._snapWithConnections(intersectPoint, anchorInfo, this._pendingPlaceRotation);
+        const snap = this._snapWithConnections(
+          intersectPoint,
+          anchorInfo,
+          this._pendingPlaceRotation,
+        );
         const rot = snap.rotation + this._pendingPlaceRotation;
         this._commitTemplate(snap.position, rot);
       }
       return;
     }
 
-    if (this.currentTool === 'place' && this.activeModel && this.activeGeometry) {
+    if (
+      this.currentTool === "place" &&
+      this.activeModel &&
+      this.activeGeometry
+    ) {
       const intersectPoint = this._getGroundIntersect();
       if (intersectPoint) {
-        const snap = this._snapWithConnections(intersectPoint, this.activeModel, this._pendingPlaceRotation);
+        const snap = this._snapWithConnections(
+          intersectPoint,
+          this.activeModel,
+          this._pendingPlaceRotation,
+        );
         const rot = snap.rotation + this._pendingPlaceRotation;
         this._placeModel(snap.position, rot);
       }
       return;
     }
 
-    if (this.currentTool === 'delete') {
+    if (this.currentTool === "delete") {
       const hits = this._raycastPlaced();
       if (hits.length > 0) {
         this._removeModel(hits[0].object);
@@ -374,7 +448,7 @@ export class PlacementSystem {
       return;
     }
 
-    if (this.currentTool === 'select') {
+    if (this.currentTool === "select") {
       const hits = this._raycastPlaced();
       if (hits.length > 0) {
         if (e.shiftKey) {
@@ -385,10 +459,12 @@ export class PlacementSystem {
         if (this.selectedMeshes.includes(hits[0].object)) {
           this._isDragging = false;
           this._dragStartPoint = new THREE.Vector3(
-            this.pointer.x, this.pointer.y, 0
+            this.pointer.x,
+            this.pointer.y,
+            0,
           );
           this._dragStartPositions = new Map(
-            this.selectedMeshes.map(m => [m, m.position.clone()])
+            this.selectedMeshes.map((m) => [m, m.position.clone()]),
           );
         }
       } else {
@@ -405,14 +481,19 @@ export class PlacementSystem {
     // Snapshot coordinates and coalesce: mousemove can fire far more often
     // than the display refreshes; the expensive snap/ghost/indicator work
     // below runs at most once per frame using the latest position.
-    this._coalescedPointer = { x: e.clientX, y: e.clientY, target: e.currentTarget };
+    this._coalescedPointer = {
+      x: e.clientX,
+      y: e.clientY,
+      target: e.currentTarget,
+    };
     if (this._pointerFrameQueued) return;
     this._pointerFrameQueued = true;
     requestAnimationFrame(() => {
       this._pointerFrameQueued = false;
       const p = this._coalescedPointer;
       this._coalescedPointer = null;
-      if (p && p.target?.isConnected !== false) this._processPointerMove(p.x, p.y, p.target);
+      if (p && p.target?.isConnected !== false)
+        this._processPointerMove(p.x, p.y, p.target);
     });
   }
 
@@ -431,12 +512,23 @@ export class PlacementSystem {
   // Re-snaps and repositions the template-placement ghost group to follow
   // the pointer, if a multi-model template is currently being placed.
   _updateTemplateGhostSnap() {
-    if (!(this.currentTool === 'place' && this.activeTemplate && this.templateTiles.length > 0)) return;
+    if (
+      !(
+        this.currentTool === "place" &&
+        this.activeTemplate &&
+        this.templateTiles.length > 0
+      )
+    )
+      return;
 
     const intersectPoint = this._getGroundIntersect();
     if (intersectPoint) {
       const anchorInfo = this.templateTiles[0].modelInfo;
-      const snap = this._snapWithConnections(intersectPoint, anchorInfo, this._pendingPlaceRotation);
+      const snap = this._snapWithConnections(
+        intersectPoint,
+        anchorInfo,
+        this._pendingPlaceRotation,
+      );
       this.pendingSnap = snap;
       const rot = snap.rotation + this._pendingPlaceRotation;
       this._layoutTemplateGhosts(snap.position, rot);
@@ -449,11 +541,18 @@ export class PlacementSystem {
   // Re-snaps and repositions the single-model placement ghost to follow the
   // pointer, if a single model is currently being placed.
   _updateActiveModelGhostSnap() {
-    if (!(this.currentTool === 'place' && this.activeModel && this.activeGeometry)) return;
+    if (
+      !(this.currentTool === "place" && this.activeModel && this.activeGeometry)
+    )
+      return;
 
     const intersectPoint = this._getGroundIntersect();
     if (intersectPoint) {
-      const snap = this._snapWithConnections(intersectPoint, this.activeModel, this._pendingPlaceRotation);
+      const snap = this._snapWithConnections(
+        intersectPoint,
+        this.activeModel,
+        this._pendingPlaceRotation,
+      );
       this.pendingSnap = snap;
       const rot = snap.rotation + this._pendingPlaceRotation;
       this._updateGhost(snap.position, rot);
@@ -466,11 +565,21 @@ export class PlacementSystem {
   // Drags the current selection along the ground plane, if a drag gesture
   // (past the drag threshold) is in progress in the select tool.
   _updateDragMove(rect) {
-    if (!(this.currentTool === 'select' && this._dragStartPoint && this.selectedMeshes.length > 0)) return;
+    if (
+      !(
+        this.currentTool === "select" &&
+        this._dragStartPoint &&
+        this.selectedMeshes.length > 0
+      )
+    )
+      return;
 
     const dx = this.pointer.x - this._dragStartPoint.x;
     const dy = this.pointer.y - this._dragStartPoint.y;
-    if (!this._isDragging && Math.sqrt(dx * dx + dy * dy) > this._dragThreshold / rect.width) {
+    if (
+      !this._isDragging &&
+      Math.sqrt(dx * dx + dy * dy) > this._dragThreshold / rect.width
+    ) {
       this._isDragging = true;
       this.controls.enabled = false;
     }
@@ -499,38 +608,50 @@ export class PlacementSystem {
     const dy = clientY - this._marqueeStart.y;
     if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
       if (!this._marqueeEl) {
-        this._marqueeEl = document.createElement('div');
-        this._marqueeEl.className = 'marquee-rect';
-        document.querySelector('#viewport').appendChild(this._marqueeEl);
+        this._marqueeEl = document.createElement("div");
+        this._marqueeEl.className = "marquee-rect";
+        document.querySelector("#viewport").appendChild(this._marqueeEl);
         this.controls.enabled = false;
       }
-      const vp = document.querySelector('#viewport').getBoundingClientRect();
-      const x1 = Math.max(0, Math.min(this._marqueeStart.x - vp.left, clientX - vp.left));
-      const y1 = Math.max(0, Math.min(this._marqueeStart.y - vp.top, clientY - vp.top));
-      const x2 = Math.min(vp.width, Math.max(this._marqueeStart.x - vp.left, clientX - vp.left));
-      const y2 = Math.min(vp.height, Math.max(this._marqueeStart.y - vp.top, clientY - vp.top));
-      this._marqueeEl.style.left = x1 + 'px';
-      this._marqueeEl.style.top = y1 + 'px';
-      this._marqueeEl.style.width = (x2 - x1) + 'px';
-      this._marqueeEl.style.height = (y2 - y1) + 'px';
+      const vp = document.querySelector("#viewport").getBoundingClientRect();
+      const x1 = Math.max(
+        0,
+        Math.min(this._marqueeStart.x - vp.left, clientX - vp.left),
+      );
+      const y1 = Math.max(
+        0,
+        Math.min(this._marqueeStart.y - vp.top, clientY - vp.top),
+      );
+      const x2 = Math.min(
+        vp.width,
+        Math.max(this._marqueeStart.x - vp.left, clientX - vp.left),
+      );
+      const y2 = Math.min(
+        vp.height,
+        Math.max(this._marqueeStart.y - vp.top, clientY - vp.top),
+      );
+      this._marqueeEl.style.left = x1 + "px";
+      this._marqueeEl.style.top = y1 + "px";
+      this._marqueeEl.style.width = x2 - x1 + "px";
+      this._marqueeEl.style.height = y2 - y1 + "px";
     }
   }
 
   // Updates the viewport cursor to reflect what a click would currently do.
   _updateHoverCursor() {
-    if (this.currentTool === 'select' && !this._isDragging) {
+    if (this.currentTool === "select" && !this._isDragging) {
       const hits = this._raycastPlaced();
-      document.querySelector('#viewport').style.cursor =
-        hits.length > 0 ? 'pointer' : 'default';
-    } else if (this.currentTool === 'place') {
-      document.querySelector('#viewport').style.cursor = 'crosshair';
+      document.querySelector("#viewport").style.cursor =
+        hits.length > 0 ? "pointer" : "default";
+    } else if (this.currentTool === "place") {
+      document.querySelector("#viewport").style.cursor = "crosshair";
     }
   }
 
   _onKeyDown(e) {
-    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+    if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
 
-    if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+    if ((e.ctrlKey || e.metaKey) && e.key === "z") {
       e.preventDefault();
       if (e.shiftKey) {
         this.undoRedo.redo();
@@ -544,7 +665,7 @@ export class PlacementSystem {
       return;
     }
 
-    if ((e.ctrlKey || e.metaKey) && e.key === 'y') {
+    if ((e.ctrlKey || e.metaKey) && e.key === "y") {
       e.preventDefault();
       this.undoRedo.redo();
       this._debounceBom();
@@ -554,20 +675,20 @@ export class PlacementSystem {
       return;
     }
 
-    if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
+    if ((e.ctrlKey || e.metaKey) && e.key === "c") {
       e.preventDefault();
       this._copySelection();
       return;
     }
 
-    if ((e.ctrlKey || e.metaKey) && e.key === 'v') {
+    if ((e.ctrlKey || e.metaKey) && e.key === "v") {
       e.preventDefault();
       this._paste();
       return;
     }
 
-    if (e.key === 'r' || e.key === 'R') {
-      if (this.currentTool === 'place' && this.templateGhosts.length > 0) {
+    if (e.key === "r" || e.key === "R") {
+      if (this.currentTool === "place" && this.templateGhosts.length > 0) {
         this._pendingPlaceRotation += Math.PI / 2;
         if (this.pendingSnap) {
           const snap = this.pendingSnap;
@@ -576,9 +697,10 @@ export class PlacementSystem {
         }
         this.updateInfo();
         this._requestRenderFrame();
-      } else if (this.currentTool === 'place' && this.ghostMesh) {
+      } else if (this.currentTool === "place" && this.ghostMesh) {
         this._pendingPlaceRotation += Math.PI / 2;
-        this.ghostMesh.rotation.y = (this.pendingSnap?.rotation || 0) + this._pendingPlaceRotation;
+        this.ghostMesh.rotation.y =
+          (this.pendingSnap?.rotation || 0) + this._pendingPlaceRotation;
         this.updateInfo();
         this._requestRenderFrame();
       } else if (this.selectedMeshes.length > 0) {
@@ -587,9 +709,9 @@ export class PlacementSystem {
           const mesh = this.selectedMeshes[0];
           const oldRot = mesh.rotation.y;
           const newRot = oldRot + angle;
-          this.undoRedo.execute(new RotateCommand(mesh, 'y', oldRot, newRot));
+          this.undoRedo.execute(new RotateCommand(mesh, "y", oldRot, newRot));
         } else {
-          this._rotateGroup('y', angle);
+          this._rotateGroup("y", angle);
         }
         this._syncOutlines();
         this._saveState();
@@ -597,20 +719,22 @@ export class PlacementSystem {
       }
     }
 
-    if ((e.key === 'x' || e.key === 'X') && this.selectedMeshes.length > 0) {
+    if ((e.key === "x" || e.key === "X") && this.selectedMeshes.length > 0) {
       e.preventDefault();
       const angle = e.shiftKey ? Math.PI / 4 : Math.PI / 2;
-      this._rotateSelection('x', angle);
+      this._rotateSelection("x", angle);
     }
-    if ((e.key === 'z' || e.key === 'Z') && this.selectedMeshes.length > 0) {
+    if ((e.key === "z" || e.key === "Z") && this.selectedMeshes.length > 0) {
       e.preventDefault();
       const angle = e.shiftKey ? Math.PI / 4 : Math.PI / 2;
-      this._rotateSelection('z', angle);
+      this._rotateSelection("z", angle);
     }
 
-    if (e.key === 'Delete' || e.key === 'Backspace') {
+    if (e.key === "Delete" || e.key === "Backspace") {
       if (this.selectedMeshes.length > 0) {
-        const batch = this.selectedMeshes.map(m => new RemoveCommand(this, m));
+        const batch = this.selectedMeshes.map(
+          (m) => new RemoveCommand(this, m),
+        );
         this.undoRedo.execute(new BatchCommand(batch));
         this._clearOutlines();
         this.selectedMeshes = [];
@@ -620,28 +744,36 @@ export class PlacementSystem {
       }
     }
 
-    if (e.key === 'q' || e.key === 'Q') {
-      this.setTool('select');
+    if (e.key === "q" || e.key === "Q") {
+      this.setTool("select");
       this._updateToolbar();
     }
-    if (e.key === 'w' || e.key === 'W') {
+    if (e.key === "w" || e.key === "W") {
       if (this.activeModel) {
-        this.setTool('place');
+        this.setTool("place");
         this._updateToolbar();
       }
     }
-    if (e.key === 'd' || e.key === 'D') {
-      this.setTool('delete');
+    if (e.key === "d" || e.key === "D") {
+      this.setTool("delete");
       this._updateToolbar();
     }
-    if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key) && this.selectedMeshes.length > 0) {
+    if (
+      ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.key) &&
+      this.selectedMeshes.length > 0
+    ) {
       e.preventDefault();
       const step = e.shiftKey ? INCH / 8 : QUARTER_INCH;
-      const dx = e.key === 'ArrowRight' ? step : e.key === 'ArrowLeft' ? -step : 0;
-      const dz = e.key === 'ArrowDown' ? step : e.key === 'ArrowUp' ? -step : 0;
-      const batch = this.selectedMeshes.map(m => {
+      const dx =
+        e.key === "ArrowRight" ? step : e.key === "ArrowLeft" ? -step : 0;
+      const dz = e.key === "ArrowDown" ? step : e.key === "ArrowUp" ? -step : 0;
+      const batch = this.selectedMeshes.map((m) => {
         const oldPos = m.position.clone();
-        const raw = new THREE.Vector3(m.position.x + dx, m.position.y, m.position.z + dz);
+        const raw = new THREE.Vector3(
+          m.position.x + dx,
+          m.position.y,
+          m.position.z + dz,
+        );
         const snapped = this._snapToGrid(raw, step);
         snapped.y = oldPos.y;
         return new MoveCommand(m, oldPos, snapped);
@@ -652,11 +784,14 @@ export class PlacementSystem {
       this._requestRenderFrame();
     }
 
-    if ((e.key === 'PageUp' || e.key === 'PageDown') && this.currentTool === 'place' &&
-        (this.ghostMesh || this.templateGhosts.length > 0)) {
+    if (
+      (e.key === "PageUp" || e.key === "PageDown") &&
+      this.currentTool === "place" &&
+      (this.ghostMesh || this.templateGhosts.length > 0)
+    ) {
       e.preventDefault();
       const step = e.shiftKey ? INCH / 8 : QUARTER_INCH;
-      this._pendingPlaceHeight += e.key === 'PageUp' ? step : -step;
+      this._pendingPlaceHeight += e.key === "PageUp" ? step : -step;
       if (this.pendingSnap) {
         const snap = this.pendingSnap;
         const rot = snap.rotation + this._pendingPlaceRotation;
@@ -670,11 +805,14 @@ export class PlacementSystem {
       this._requestRenderFrame();
     }
 
-    if ((e.key === 'PageUp' || e.key === 'PageDown') && this.selectedMeshes.length > 0) {
+    if (
+      (e.key === "PageUp" || e.key === "PageDown") &&
+      this.selectedMeshes.length > 0
+    ) {
       e.preventDefault();
       const step = e.shiftKey ? INCH / 8 : QUARTER_INCH;
-      const dy = e.key === 'PageUp' ? step : -step;
-      const batch = this.selectedMeshes.map(m => {
+      const dy = e.key === "PageUp" ? step : -step;
+      const batch = this.selectedMeshes.map((m) => {
         const oldPos = m.position.clone();
         const newPos = oldPos.clone();
         newPos.y = Math.round((oldPos.y + dy) / step) * step;
@@ -686,17 +824,17 @@ export class PlacementSystem {
       this._requestRenderFrame();
     }
 
-    if (e.key === 'Escape') {
+    if (e.key === "Escape") {
       this._hideContextMenu();
       this._deselectAll();
       this._clearGhost();
       this._clearTemplateGhosts();
       this.activeTemplate = null;
       this.templateTiles = [];
-      
+
       this._pendingPlaceRotation = 0;
       this._pendingPlaceHeight = 0;
-      this.setTool('select');
+      this.setTool("select");
       this._updateToolbar();
     }
   }
@@ -707,9 +845,8 @@ export class PlacementSystem {
     this._clearTemplateGhosts();
     this.activeTemplate = null;
     this.templateTiles = [];
-    
 
-    const viewport = document.querySelector('#viewport');
+    const viewport = document.querySelector("#viewport");
     if (!viewport) return;
     const rect = viewport.getBoundingClientRect();
     this.pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
@@ -730,7 +867,7 @@ export class PlacementSystem {
   }
 
   _hideContextMenu() {
-    const menu = document.querySelector('#context-menu');
+    const menu = document.querySelector("#context-menu");
     if (menu) menu.remove();
     this._contextMesh = null;
   }
@@ -739,57 +876,59 @@ export class PlacementSystem {
     this._hideContextMenu();
     this._contextMesh = mesh;
 
-    const viewport = document.querySelector('#viewport');
+    const viewport = document.querySelector("#viewport");
     if (!viewport) return;
 
-    const menu = document.createElement('div');
-    menu.id = 'context-menu';
-    menu.className = 'context-menu';
-    menu.setAttribute('role', 'menu');
-    menu.setAttribute('aria-label', 'Tile actions');
+    const menu = document.createElement("div");
+    menu.id = "context-menu";
+    menu.className = "context-menu";
+    menu.setAttribute("role", "menu");
+    menu.setAttribute("aria-label", "Tile actions");
 
     const mi = mesh.userData.modelInfo || {};
     const textureTags = getEffectiveTextureTags(mi) || [];
-    const header = document.createElement('div');
-    header.className = 'context-menu-header';
-    header.textContent = mi.fileName || mi.displayName || 'Model';
+    const header = document.createElement("div");
+    header.className = "context-menu-header";
+    header.textContent = mi.fileName || mi.displayName || "Model";
     menu.appendChild(header);
 
-    const sep = document.createElement('div');
-    sep.className = 'context-menu-sep';
+    const sep = document.createElement("div");
+    sep.className = "context-menu-sep";
     menu.appendChild(sep);
 
     if (textureTags.length > 0) {
-      const tagsLabel = document.createElement('div');
-      tagsLabel.className = 'context-menu-section';
-      tagsLabel.textContent = 'Texture Tags';
+      const tagsLabel = document.createElement("div");
+      tagsLabel.className = "context-menu-section";
+      tagsLabel.textContent = "Texture Tags";
       menu.appendChild(tagsLabel);
 
       for (const t of textureTags) {
-        const tagItem = document.createElement('div');
-        tagItem.className = 'context-menu-tag' + (t.override ? ' override' : '');
+        const tagItem = document.createElement("div");
+        tagItem.className =
+          "context-menu-tag" + (t.override ? " override" : "");
         tagItem.textContent = formatTextureTag(t);
         menu.appendChild(tagItem);
       }
 
-      const sep2 = document.createElement('div');
-      sep2.className = 'context-menu-sep';
+      const sep2 = document.createElement("div");
+      sep2.className = "context-menu-sep";
       menu.appendChild(sep2);
     }
 
-    const label = document.createElement('div');
-    label.className = 'context-menu-section';
-    label.textContent = 'Texture';
+    const label = document.createElement("div");
+    label.className = "context-menu-section";
+    label.textContent = "Texture";
     menu.appendChild(label);
 
     const currentOverride = getTextureOverride(textureTags);
 
     for (const opt of TEXTURE_OPTIONS) {
-      const item = document.createElement('button');
-      item.className = 'context-menu-item' + (opt.name === currentOverride ? ' active' : '');
-      item.setAttribute('role', 'menuitem');
+      const item = document.createElement("button");
+      item.className =
+        "context-menu-item" + (opt.name === currentOverride ? " active" : "");
+      item.setAttribute("role", "menuitem");
       item.textContent = opt.label;
-      item.addEventListener('click', (e) => {
+      item.addEventListener("click", (e) => {
         e.stopPropagation();
         this._setTextureOverride(mesh, opt.name);
         this._hideContextMenu();
@@ -798,15 +937,15 @@ export class PlacementSystem {
     }
 
     if (currentOverride) {
-      const sep2 = document.createElement('div');
-      sep2.className = 'context-menu-sep';
+      const sep2 = document.createElement("div");
+      sep2.className = "context-menu-sep";
       menu.appendChild(sep2);
 
-      const clear = document.createElement('button');
-      clear.className = 'context-menu-item';
-      clear.setAttribute('role', 'menuitem');
-      clear.textContent = 'Remove texture override';
-      clear.addEventListener('click', (e) => {
+      const clear = document.createElement("button");
+      clear.className = "context-menu-item";
+      clear.setAttribute("role", "menuitem");
+      clear.textContent = "Remove texture override";
+      clear.addEventListener("click", (e) => {
         e.stopPropagation();
         this._setTextureOverride(mesh, null);
         this._hideContextMenu();
@@ -820,9 +959,9 @@ export class PlacementSystem {
     const mh = menu.offsetHeight;
     const left = Math.min(x, viewport.clientWidth - mw - 4);
     const top = Math.min(y, viewport.clientHeight - mh - 4);
-    menu.style.left = Math.max(4, left) + 'px';
-    menu.style.top = Math.max(4, top) + 'px';
-    menu.querySelector('button')?.focus();
+    menu.style.left = Math.max(4, left) + "px";
+    menu.style.top = Math.max(4, top) + "px";
+    menu.querySelector("button")?.focus();
   }
 
   _setTextureOverride(mesh, name) {
@@ -837,7 +976,7 @@ export class PlacementSystem {
 
   _onPointerUp() {
     if (this._isMarquee && this._marqueeEl) {
-      const vp = document.querySelector('#viewport').getBoundingClientRect();
+      const vp = document.querySelector("#viewport").getBoundingClientRect();
       const r = this._marqueeEl.getBoundingClientRect();
       const minX = r.left - vp.left;
       const minY = r.top - vp.top;
@@ -847,7 +986,12 @@ export class PlacementSystem {
       const selected = [];
       for (const mesh of this.placedMeshes) {
         const screen = this._worldToScreen(mesh.position, vp);
-        if (screen.x >= minX && screen.x <= maxX && screen.y >= minY && screen.y <= maxY) {
+        if (
+          screen.x >= minX &&
+          screen.x <= maxX &&
+          screen.y >= minY &&
+          screen.y <= maxY
+        ) {
           selected.push(mesh);
         }
       }
@@ -869,7 +1013,7 @@ export class PlacementSystem {
     this._marqueeStart = null;
 
     if (this._isDragging && this.selectedMeshes.length > 0) {
-      const batch = this.selectedMeshes.map(m => {
+      const batch = this.selectedMeshes.map((m) => {
         const oldPos = this._dragStartPositions.get(m);
         const snapped = this._snapToGrid(m.position);
         snapped.y = oldPos.y;
@@ -886,7 +1030,7 @@ export class PlacementSystem {
   }
 
   _copySelection() {
-    this._clipboard = this.selectedMeshes.map(m => ({
+    this._clipboard = this.selectedMeshes.map((m) => ({
       _id: m.userData.modelInfo._id,
       fileName: m.userData.modelInfo.fileName,
       storageUrl: m.userData.modelInfo.storageUrl || null,
@@ -907,7 +1051,9 @@ export class PlacementSystem {
 
     for (const item of this._clipboard) {
       let modelInfo;
-      const sourceMesh = this.placedMeshes.find(m => m.userData.modelInfo._id === item._id);
+      const sourceMesh = this.placedMeshes.find(
+        (m) => m.userData.modelInfo._id === item._id,
+      );
       if (sourceMesh) {
         modelInfo = { ...sourceMesh.userData.modelInfo };
       } else {
@@ -920,8 +1066,8 @@ export class PlacementSystem {
         mesh.rotation.set(item.rx || 0, item.ry || 0, item.rz || 0);
         cmds.push(new PlaceCommand(this, mesh));
       } catch (e) {
-        console.warn('Paste load failed:', item.fileName);
-        notify(`Could not paste ${item.fileName || 'a tile'}.`);
+        console.warn("Paste load failed:", item.fileName);
+        notify(`Could not paste ${item.fileName || "a tile"}.`);
       }
     }
 
@@ -947,7 +1093,9 @@ export class PlacementSystem {
     const denom = ray.direction.dot(this.groundPlane.normal);
     if (Math.abs(denom) < 0.0001) return null;
 
-    const t = -(ray.origin.dot(this.groundPlane.normal) + this.groundPlane.constant) / denom;
+    const t =
+      -(ray.origin.dot(this.groundPlane.normal) + this.groundPlane.constant) /
+      denom;
     if (t < 0) return null;
 
     intersect.copy(ray.origin).add(ray.direction.clone().multiplyScalar(t));
@@ -958,7 +1106,7 @@ export class PlacementSystem {
     return new THREE.Vector3(
       Math.round(point.x / step) * step,
       0,
-      Math.round(point.z / step) * step
+      Math.round(point.z / step) * step,
     );
   }
 
@@ -983,25 +1131,30 @@ export class PlacementSystem {
     pivot.divideScalar(meshes.length);
 
     const axisVec = new THREE.Vector3();
-    if (axis === 'x') axisVec.set(1, 0, 0);
-    else if (axis === 'y') axisVec.set(0, 1, 0);
+    if (axis === "x") axisVec.set(1, 0, 0);
+    else if (axis === "y") axisVec.set(0, 1, 0);
     else axisVec.set(0, 0, 1);
 
     const q = new THREE.Quaternion().setFromAxisAngle(axisVec, angle);
-    const snapshots = meshes.map(m => {
+    const snapshots = meshes.map((m) => {
       const oldPos = m.position.clone();
       const rel = oldPos.clone().sub(pivot);
       rel.applyQuaternion(q);
       const newPos = pivot.clone().add(rel);
-      if (axis === 'y') {
+      if (axis === "y") {
         const sn = this._snapToGrid(newPos);
         newPos.x = sn.x;
         newPos.z = sn.z;
       }
 
       const oldEuler = m.rotation.clone();
-      const newQuat = q.clone().multiply(new THREE.Quaternion().setFromEuler(m.rotation));
-      const newEuler = new THREE.Euler().setFromQuaternion(newQuat, m.rotation.order);
+      const newQuat = q
+        .clone()
+        .multiply(new THREE.Quaternion().setFromEuler(m.rotation));
+      const newEuler = new THREE.Euler().setFromQuaternion(
+        newQuat,
+        m.rotation.order,
+      );
 
       return {
         mesh: m,
@@ -1017,7 +1170,7 @@ export class PlacementSystem {
   _snapWithConnections(rawPoint, modelInfo, placeRotation) {
     const gridPoint = this._snapToGrid(rawPoint);
 
-    if (modelInfo.typeTags.includes('secret_door')) {
+    if (modelInfo.typeTags.includes("secret_door")) {
       return this._snapSecretDoor(rawPoint, gridPoint, modelInfo);
     }
 
@@ -1026,19 +1179,19 @@ export class PlacementSystem {
       if (stackTop != null) {
         const gridPt = this._snapToGrid(rawPoint);
         gridPt.y = stackTop;
-        return { position: gridPt, rotation: 0, type: 'grid' };
+        return { position: gridPt, rotation: 0, type: "grid" };
       }
     }
 
     if (!isBaseTile(modelInfo)) {
       const base = this._findBaseAt(rawPoint);
-      const y = base ? (base.userData.height || 0) : 0;
+      const y = base ? base.userData.height || 0 : 0;
       const gridPt = this._snapToGrid(rawPoint);
       gridPt.y = y;
-      return { position: gridPt, rotation: 0, type: 'grid' };
+      return { position: gridPt, rotation: 0, type: "grid" };
     }
 
-    return { position: gridPoint, rotation: 0, type: 'grid' };
+    return { position: gridPoint, rotation: 0, type: "grid" };
   }
 
   _findBaseAt(point) {
@@ -1050,8 +1203,10 @@ export class PlacementSystem {
       const pf = tileMeta?.footprint || getTileFootprintMm(pInfo);
       const halfW = pf.w / 2;
       const halfD = pf.d / 2;
-      if (Math.abs(point.x - placed.position.x) <= halfW &&
-          Math.abs(point.z - placed.position.z) <= halfD) {
+      if (
+        Math.abs(point.x - placed.position.x) <= halfW &&
+        Math.abs(point.z - placed.position.z) <= halfD
+      ) {
         return placed;
       }
     }
@@ -1060,8 +1215,12 @@ export class PlacementSystem {
 
   _findStackTop(point, modelInfo, rotation) {
     const activeFp = getTileFootprintMm(modelInfo);
-    const nw = Math.abs(Math.cos(rotation)) * activeFp.w + Math.abs(Math.sin(rotation)) * activeFp.d;
-    const nd = Math.abs(Math.sin(rotation)) * activeFp.w + Math.abs(Math.cos(rotation)) * activeFp.d;
+    const nw =
+      Math.abs(Math.cos(rotation)) * activeFp.w +
+      Math.abs(Math.sin(rotation)) * activeFp.d;
+    const nd =
+      Math.abs(Math.sin(rotation)) * activeFp.w +
+      Math.abs(Math.cos(rotation)) * activeFp.d;
     const halfW = nw / 2;
     const halfD = nd / 2;
 
@@ -1070,16 +1229,30 @@ export class PlacementSystem {
       const pInfo = placed.userData.modelInfo;
       if (!pInfo) continue;
       const tileMeta = placed.userData.tileMeta;
-      if (tileMeta ? !tileMeta.isWall && !tileMeta.isColumn && !tileMeta.isWallBase && !tileMeta.isBase :
-        !isWallTile(pInfo) && !isColumnTile(pInfo) && !isWallBaseTile(pInfo) && !isBaseTile(pInfo)) continue;
+      if (
+        tileMeta
+          ? !tileMeta.isWall &&
+            !tileMeta.isColumn &&
+            !tileMeta.isWallBase &&
+            !tileMeta.isBase
+          : !isWallTile(pInfo) &&
+            !isColumnTile(pInfo) &&
+            !isWallBaseTile(pInfo) &&
+            !isBaseTile(pInfo)
+      )
+        continue;
 
       const pf = tileMeta?.footprint || getTileFootprintMm(pInfo);
       const pRot = placed.rotation.y;
-      const pw = Math.abs(Math.cos(pRot)) * pf.w + Math.abs(Math.sin(pRot)) * pf.d;
-      const pd = Math.abs(Math.sin(pRot)) * pf.w + Math.abs(Math.cos(pRot)) * pf.d;
+      const pw =
+        Math.abs(Math.cos(pRot)) * pf.w + Math.abs(Math.sin(pRot)) * pf.d;
+      const pd =
+        Math.abs(Math.sin(pRot)) * pf.w + Math.abs(Math.cos(pRot)) * pf.d;
 
-      const overlapX = Math.abs(point.x - placed.position.x) <= (halfW + pw) / 2;
-      const overlapZ = Math.abs(point.z - placed.position.z) <= (halfD + pd) / 2;
+      const overlapX =
+        Math.abs(point.x - placed.position.x) <= (halfW + pw) / 2;
+      const overlapZ =
+        Math.abs(point.z - placed.position.z) <= (halfD + pd) / 2;
       if (overlapX && overlapZ) {
         const top = placed.position.y + (placed.userData.height || 0);
         supports.push(top);
@@ -1091,26 +1264,39 @@ export class PlacementSystem {
   }
 
   _snapSecretDoor(rawPoint, gridPoint, modelInfo) {
-    const isTop = modelInfo.format === 'top';
+    const isTop = modelInfo.format === "top";
 
     if (isTop) {
-      let best = { position: gridPoint, rotation: 0, type: 'grid' };
+      let best = { position: gridPoint, rotation: 0, type: "grid" };
       let bestDist = SNAP_RADIUS;
       for (const placed of this.placedMeshes) {
         const pInfo = placed.userData.modelInfo;
-        if (!pInfo || !pInfo.typeTags.includes('secret_door') || pInfo.format !== 'bottom') continue;
+        if (
+          !pInfo ||
+          !pInfo.typeTags.includes("secret_door") ||
+          pInfo.format !== "bottom"
+        )
+          continue;
 
         const dist = rawPoint.distanceTo(placed.position);
         if (dist < bestDist) {
           bestDist = dist;
           const y = placed.position.y + (placed.userData.height || 0);
-          best = { position: new THREE.Vector3(placed.position.x, y, placed.position.z), rotation: placed.rotation.y, type: 'on-secret-door-bottom' };
+          best = {
+            position: new THREE.Vector3(
+              placed.position.x,
+              y,
+              placed.position.z,
+            ),
+            rotation: placed.rotation.y,
+            type: "on-secret-door-bottom",
+          };
         }
       }
       return best;
     }
 
-    let best = { position: gridPoint, rotation: 0, type: 'grid' };
+    let best = { position: gridPoint, rotation: 0, type: "grid" };
     let bestDist = SNAP_RADIUS;
     for (const placed of this.placedMeshes) {
       const pInfo = placed.userData.modelInfo;
@@ -1120,7 +1306,11 @@ export class PlacementSystem {
       if (dist < bestDist) {
         bestDist = dist;
         const y = placed.userData.height || 0;
-        best = { position: new THREE.Vector3(placed.position.x, y, placed.position.z), rotation: placed.rotation.y, type: 'on-wall-base' };
+        best = {
+          position: new THREE.Vector3(placed.position.x, y, placed.position.z),
+          rotation: placed.rotation.y,
+          type: "on-wall-base",
+        };
       }
     }
     return best;
@@ -1172,16 +1362,19 @@ export class PlacementSystem {
   _worldToScreen(worldPos, viewportRect) {
     const v = worldPos.clone().project(this.camera);
     return {
-      x: (v.x + 1) / 2 * viewportRect.width,
-      y: (-v.y + 1) / 2 * viewportRect.height,
+      x: ((v.x + 1) / 2) * viewportRect.width,
+      y: ((-v.y + 1) / 2) * viewportRect.height,
     };
   }
 
   _raycastPlaced() {
     this.raycaster.setFromCamera(this.pointer, this.camera);
-    const intersects = this.raycaster.intersectObjects(this.placedMeshes, false);
+    const intersects = this.raycaster.intersectObjects(
+      this.placedMeshes,
+      false,
+    );
     if (intersects.length > 0) {
-      return intersects.filter(i => i.object.userData.isPlaced);
+      return intersects.filter((i) => i.object.userData.isPlaced);
     }
     return [];
   }
@@ -1205,7 +1398,7 @@ export class PlacementSystem {
     const idx = this.selectedMeshes.indexOf(mesh);
     if (idx >= 0) {
       this.selectedMeshes.splice(idx, 1);
-      const outlineIdx = this.outlineMeshes.findIndex(o => {
+      const outlineIdx = this.outlineMeshes.findIndex((o) => {
         const src = o.userData?.sourceMesh;
         return src === mesh;
       });
@@ -1260,13 +1453,18 @@ export class PlacementSystem {
   }
 
   _placedCacheKeys() {
-    return new Set(this.placedMeshes.map(m => m.userData.modelInfo?._id || m.userData.modelInfo?.fileName).filter(Boolean));
+    return new Set(
+      this.placedMeshes
+        .map((m) => m.userData.modelInfo?._id || m.userData.modelInfo?.fileName)
+        .filter(Boolean),
+    );
   }
 
   _pruneUnusedGeometries() {
     const keepKeys = this._placedCacheKeys();
     for (const mesh of this.undoRedo.getReferencedMeshes()) {
-      const key = mesh.userData.modelInfo?._id || mesh.userData.modelInfo?.fileName;
+      const key =
+        mesh.userData.modelInfo?._id || mesh.userData.modelInfo?.fileName;
       if (key) keepKeys.add(key);
     }
     pruneGeometries(keepKeys);
@@ -1294,7 +1492,7 @@ export class PlacementSystem {
   exportLayout() {
     return {
       version: 1,
-      tiles: this.placedMeshes.map(m => ({
+      tiles: this.placedMeshes.map((m) => ({
         _id: m.userData.modelInfo._id,
         fileName: m.userData.modelInfo.fileName,
         x: m.position.x,
@@ -1306,7 +1504,7 @@ export class PlacementSystem {
         storageUrl: m.userData.modelInfo.storageUrl || null,
         catalogId: m.userData.modelInfo.catalogId || null,
         textureTags: getTextureOverride(m.userData.modelInfo.textureTags)
-          ? m.userData.modelInfo.textureTags.filter(t => t.override)
+          ? m.userData.modelInfo.textureTags.filter((t) => t.override)
           : undefined,
       })),
     };
@@ -1327,7 +1525,7 @@ export class PlacementSystem {
   }
 
   _saveState() {
-    const tiles = this.placedMeshes.map(m => ({
+    const tiles = this.placedMeshes.map((m) => ({
       _id: m.userData.modelInfo._id,
       fileName: m.userData.modelInfo.fileName,
       x: m.position.x,
@@ -1340,7 +1538,7 @@ export class PlacementSystem {
       catalogId: m.userData.modelInfo.catalogId || null,
       sha: m.userData.modelInfo.sha || null,
       textureTags: getTextureOverride(m.userData.modelInfo.textureTags)
-        ? m.userData.modelInfo.textureTags.filter(t => t.override)
+        ? m.userData.modelInfo.textureTags.filter((t) => t.override)
         : undefined,
     }));
     saveFileData(getActiveId(), { version: 1, tiles });
@@ -1353,7 +1551,7 @@ export class PlacementSystem {
     const resolved = [];
     for (const item of data) {
       let modelInfo;
-      const entry = item._id ? manifest.find(m => m._id === item._id) : null;
+      const entry = item._id ? manifest.find((m) => m._id === item._id) : null;
       if (entry?.modelInfo) {
         modelInfo = { ...entry.modelInfo };
         if (item._id) modelInfo._id = item._id;
@@ -1370,27 +1568,38 @@ export class PlacementSystem {
         modelInfo.sha = item.sha;
       }
       if (item.textureTags && item.textureTags.length > 0) {
-        modelInfo.textureTags = setTextureOverride(modelInfo.textureTags, item.textureTags[0].name);
+        modelInfo.textureTags = setTextureOverride(
+          modelInfo.textureTags,
+          item.textureTags[0].name,
+        );
       }
       // If this model isn't already in the saved manifest, add it so the
       // browser keeps track of models referenced by loaded layouts.
       if (!entry) {
-        try { addDownloadedModelEntry(modelInfo); } catch (e) { console.warn('Failed to register downloaded model:', e); }
+        try {
+          addDownloadedModelEntry(modelInfo);
+        } catch (e) {
+          console.warn("Failed to register downloaded model:", e);
+        }
       }
       resolved.push({ item, modelInfo });
     }
     // Phase 2: load all geometries concurrently (was serial: N× latency).
-    const geos = await Promise.all(resolved.map(async ({ item, modelInfo }) => {
-      try {
-        return await loadModelGeometry(modelInfo);
-      } catch (e) {
-        console.warn('Failed to restore model:', item.fileName);
-        return null;
-      }
-    }));
-    const failed = geos.filter(geo => !geo).length;
+    const geos = await Promise.all(
+      resolved.map(async ({ item, modelInfo }) => {
+        try {
+          return await loadModelGeometry(modelInfo);
+        } catch (e) {
+          console.warn("Failed to restore model:", item.fileName);
+          return null;
+        }
+      }),
+    );
+    const failed = geos.filter((geo) => !geo).length;
     if (failed > 0) {
-      notify(`${failed} of ${resolved.length} layout tiles could not be loaded.`);
+      notify(
+        `${failed} of ${resolved.length} layout tiles could not be loaded.`,
+      );
     }
     // Phase 3: create meshes in saved order.
     for (let i = 0; i < resolved.length; i++) {
@@ -1419,7 +1628,7 @@ export class PlacementSystem {
       await this._loadFromData(tiles);
       this._requestRenderFrame();
     } catch (e) {
-      console.warn('Failed to load state:', e);
+      console.warn("Failed to load state:", e);
     }
   }
 
@@ -1462,25 +1671,25 @@ export class PlacementSystem {
         const resp = await fetchWithTimeout(url, {}, 120000);
         if (!resp.ok) continue;
         const blob = await resp.blob();
-        const a = document.createElement('a');
+        const a = document.createElement("a");
         a.href = URL.createObjectURL(blob);
         a.download = fileName;
         a.click();
         URL.revokeObjectURL(a.href);
       } catch (e) {
-        console.warn('Download failed:', fileName, e);
+        console.warn("Download failed:", fileName, e);
       }
     }
   }
 
   destroy() {
-    const target = document.querySelector('#viewport');
+    const target = document.querySelector("#viewport");
     if (!target) return;
-    target.removeEventListener('pointerdown', this._onPointerDown);
-    target.removeEventListener('pointermove', this._onPointerMove);
-    target.removeEventListener('pointerup', this._onPointerUp);
-    target.removeEventListener('contextmenu', this._onContextMenu);
-    window.removeEventListener('keydown', this._onKeyDown);
+    target.removeEventListener("pointerdown", this._onPointerDown);
+    target.removeEventListener("pointermove", this._onPointerMove);
+    target.removeEventListener("pointerup", this._onPointerUp);
+    target.removeEventListener("contextmenu", this._onContextMenu);
+    window.removeEventListener("keydown", this._onKeyDown);
     this._hideContextMenu();
   }
 }

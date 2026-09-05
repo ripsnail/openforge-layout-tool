@@ -50,7 +50,8 @@ export class UndoRedoManager {
       }
       for (const child of command?.commands || []) visit(child);
     };
-    for (const command of [...this.undoStack, ...this.redoStack]) visit(command);
+    for (const command of [...this.undoStack, ...this.redoStack])
+      visit(command);
     return meshes;
   }
 

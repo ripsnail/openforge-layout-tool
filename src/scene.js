@@ -1,5 +1,5 @@
-import * as THREE from 'three';
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import * as THREE from "three";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 
 const INCH = 25.4;
 
@@ -9,7 +9,10 @@ export function initScene(container) {
   scene.fog = new THREE.Fog(0x2a2a3e, 50 * INCH, 100 * INCH);
 
   const camera = new THREE.PerspectiveCamera(
-    45, container.clientWidth / container.clientHeight, 1, 3000
+    45,
+    container.clientWidth / container.clientHeight,
+    1,
+    3000,
   );
   camera.position.set(12 * INCH, 10 * INCH, 12 * INCH);
   camera.lookAt(0, 0, 0);
@@ -105,7 +108,10 @@ export function initScene(container) {
 
   scene.add(gridHelper);
 
-  const groundGeo = new THREE.PlaneGeometry(gridSize + 20 * INCH, gridSize + 20 * INCH);
+  const groundGeo = new THREE.PlaneGeometry(
+    gridSize + 20 * INCH,
+    gridSize + 20 * INCH,
+  );
   const groundMat = new THREE.MeshStandardMaterial({
     color: 0x3a3a4a,
     roughness: 0.9,
@@ -118,7 +124,7 @@ export function initScene(container) {
   ground.rotation.x = -Math.PI / 2;
   ground.position.y = -0.1;
   ground.receiveShadow = true;
-  ground.name = 'ground';
+  ground.name = "ground";
   scene.add(ground);
 
   let renderRequested = false;
@@ -131,7 +137,7 @@ export function initScene(container) {
     renderer.setSize(w, h);
     requestRender();
   }
-  window.addEventListener('resize', resize);
+  window.addEventListener("resize", resize);
 
   function requestRender() {
     if (!renderRequested) {
@@ -148,8 +154,17 @@ export function initScene(container) {
     renderer.render(scene, camera);
   }
 
-  controls.addEventListener('change', requestRender);
+  controls.addEventListener("change", requestRender);
   requestRender();
 
-  return { scene, camera, renderer, controls, ground, gridHelper, resize, requestRender };
+  return {
+    scene,
+    camera,
+    renderer,
+    controls,
+    ground,
+    gridHelper,
+    resize,
+    requestRender,
+  };
 }

@@ -1,6 +1,10 @@
-import { generateModelId, resolveTextureColor, getThemeInfo } from './modelCatalog.js';
+import {
+  generateModelId,
+  resolveTextureColor,
+  getThemeInfo,
+} from "./modelCatalog.js";
 
-const API_BASE = '/catalog-api';
+const API_BASE = "/catalog-api";
 
 // fetch() with a hard timeout: hung requests (stalled proxy, dead CDN)
 // reject instead of hanging the UI forever.
@@ -11,19 +15,22 @@ export async function fetchWithTimeout(url, options = {}, timeoutMs = 30000) {
   const onExternalAbort = () => controller.abort();
   if (externalSignal) {
     if (externalSignal.aborted) controller.abort();
-    else externalSignal.addEventListener('abort', onExternalAbort);
+    else externalSignal.addEventListener("abort", onExternalAbort);
   }
   try {
     return await fetch(url, { ...restOptions, signal: controller.signal });
   } catch (e) {
-    if (e?.name === 'AbortError') {
+    if (e?.name === "AbortError") {
       if (externalSignal?.aborted) throw e;
-      throw new Error(`Request timed out after ${timeoutMs}ms: ${url}`, { cause: e });
+      throw new Error(`Request timed out after ${timeoutMs}ms: ${url}`, {
+        cause: e,
+      });
     }
     throw e;
   } finally {
     clearTimeout(timer);
-    if (externalSignal) externalSignal.removeEventListener('abort', onExternalAbort);
+    if (externalSignal)
+      externalSignal.removeEventListener("abort", onExternalAbort);
   }
 }
 
@@ -35,28 +42,31 @@ const getCatalogThemeInfo = getThemeInfo;
 // be read/tested in isolation.
 
 function parsePrimaryType(tagSet) {
-  if (tagSet.has('shape|floor')) return 'floor';
-  if (tagSet.has('shape|base')) return 'base';
-  if (tagSet.has('shape|wall')) return 'wall';
-  if (tagSet.has('shape|column')) return 'column';
-  if (tagSet.has('shape|corner')) return 'corner';
-  return 'other';
+  if (tagSet.has("shape|floor")) return "floor";
+  if (tagSet.has("shape|base")) return "base";
+  if (tagSet.has("shape|wall")) return "wall";
+  if (tagSet.has("shape|column")) return "column";
+  if (tagSet.has("shape|corner")) return "corner";
+  return "other";
 }
 
 function parseTypeTags(tagSet, primaryType) {
   const typeTags = [];
-  if (primaryType !== 'other') typeTags.push(primaryType);
+  if (primaryType !== "other") typeTags.push(primaryType);
 
-  if (tagSet.has('shape|base|wall') || (tagSet.has('shape|base') && tagSet.has('shape|wall'))) {
-    if (!typeTags.includes('wall')) typeTags.push('wall');
-    if (!typeTags.includes('base')) typeTags.push('base');
+  if (
+    tagSet.has("shape|base|wall") ||
+    (tagSet.has("shape|base") && tagSet.has("shape|wall"))
+  ) {
+    if (!typeTags.includes("wall")) typeTags.push("wall");
+    if (!typeTags.includes("base")) typeTags.push("base");
   }
-  if (tagSet.has('build|s2w')) typeTags.push('s2w');
-  if (tagSet.has('build|separate wall')) typeTags.push('separate_wall');
-  if (tagSet.has('build|wall on tile')) typeTags.push('wall_on_tile');
-  if (tagSet.has('build|thick wall')) typeTags.push('thick_wall');
-  if (tagSet.has('shape|corner')) typeTags.push('corner');
-  if (tagSet.has('component|secret_door')) typeTags.push('secret_door');
+  if (tagSet.has("build|s2w")) typeTags.push("s2w");
+  if (tagSet.has("build|separate wall")) typeTags.push("separate_wall");
+  if (tagSet.has("build|wall on tile")) typeTags.push("wall_on_tile");
+  if (tagSet.has("build|thick wall")) typeTags.push("thick_wall");
+  if (tagSet.has("shape|corner")) typeTags.push("corner");
+  if (tagSet.has("component|secret_door")) typeTags.push("secret_door");
   return typeTags;
 }
 
@@ -65,37 +75,49 @@ function parseTextureTags(tags) {
   const textureSets = [];
   const textureTags = [];
   for (const tag of tags) {
-    if (!tag.startsWith('texture|')) continue;
-    const parts = tag.split('|');
+    if (!tag.startsWith("texture|")) continue;
+    const parts = tag.split("|");
     if (parts.length === 3) {
-      versionTheme = parts[1] + '%' + parts[2];
+      versionTheme = parts[1] + "%" + parts[2];
       textureTags.push({ name: parts[2], isVersion: true, tag });
       if (!textureSets.includes(parts[1])) {
         textureSets.push(parts[1]);
       }
-      if (!textureTags.some(t => t.name === parts[1] && !t.isVersion)) {
-        textureTags.push({ name: parts[1], isVersion: false, tag: `texture|${parts[1]}` });
+      if (!textureTags.some((t) => t.name === parts[1] && !t.isVersion)) {
+        textureTags.push({
+          name: parts[1],
+          isVersion: false,
+          tag: `texture|${parts[1]}`,
+        });
       }
-    } else if (parts.length === 2 && parts[1] !== 'plain' && !textureSets.includes(parts[1])) {
+    } else if (
+      parts.length === 2 &&
+      parts[1] !== "plain" &&
+      !textureSets.includes(parts[1])
+    ) {
       textureSets.push(parts[1]);
-      if (!textureTags.some(t => t.name === parts[1])) {
+      if (!textureTags.some((t) => t.name === parts[1])) {
         textureTags.push({ name: parts[1], isVersion: false, tag });
       }
     }
   }
-  const theme = versionTheme || textureSets.join('+') || 'plain';
+  const theme = versionTheme || textureSets.join("+") || "plain";
   return { theme, textureTags };
 }
 
 function parseFormat(tags) {
   let format = null;
   for (const tag of tags) {
-    if (tag.startsWith('connection|') && !tag.startsWith('connection|side') && !tag.startsWith('connection|pegs')) {
-      const parts = tag.split('|');
+    if (
+      tag.startsWith("connection|") &&
+      !tag.startsWith("connection|side") &&
+      !tag.startsWith("connection|pegs")
+    ) {
+      const parts = tag.split("|");
       if (parts.length === 2) {
         format = parts[1];
       } else if (parts.length >= 3) {
-        format = parts.slice(1).join('+');
+        format = parts.slice(1).join("+");
       }
     }
   }
@@ -104,17 +126,17 @@ function parseFormat(tags) {
 
 function parseAttributes(tagSet) {
   const attributes = [];
-  if (tagSet.has('connection|magnetic|flex')) {
-    attributes.push('magnetic', 'flex');
-  } else if (tagSet.has('connection|magnetic')) {
-    attributes.push('magnetic');
+  if (tagSet.has("connection|magnetic|flex")) {
+    attributes.push("magnetic", "flex");
+  } else if (tagSet.has("connection|magnetic")) {
+    attributes.push("magnetic");
   }
-  if (tagSet.has('connection|openlock|topless')) {
-    attributes.push('topless');
+  if (tagSet.has("connection|openlock|topless")) {
+    attributes.push("topless");
   }
-  if (tagSet.has('connection|side')) attributes.push('side');
-  if (tagSet.has('connection|left')) attributes.push('left');
-  if (tagSet.has('connection|right')) attributes.push('right');
+  if (tagSet.has("connection|side")) attributes.push("side");
+  if (tagSet.has("connection|left")) attributes.push("left");
+  if (tagSet.has("connection|right")) attributes.push("right");
   return attributes;
 }
 
@@ -125,16 +147,16 @@ function parseSize(tags, blueprint) {
   let sizeX = null;
   let sizeY = null;
   for (const tag of tags) {
-    if (tag.startsWith('size|width|')) {
-      sizeX = parseFloat(tag.split('|')[2]) || null;
+    if (tag.startsWith("size|width|")) {
+      sizeX = parseFloat(tag.split("|")[2]) || null;
     }
-    if (tag.startsWith('size|depth|')) {
-      sizeY = parseFloat(tag.split('|')[2]) || null;
+    if (tag.startsWith("size|depth|")) {
+      sizeY = parseFloat(tag.split("|")[2]) || null;
     }
   }
 
   if (sizeX === null && sizeY === null) {
-    const fname = blueprint?.file_name || blueprint?.blueprint_name || '';
+    const fname = blueprint?.file_name || blueprint?.blueprint_name || "";
     const sizeMatch = fname.match(/\.(\d+)x(\d+)\./);
     if (sizeMatch) {
       sizeX = parseInt(sizeMatch[1]);
@@ -143,18 +165,25 @@ function parseSize(tags, blueprint) {
       const letterMatch = fname.match(/\.([A-Z](?:\+[A-Z])?)\./);
       if (letterMatch) {
         const codes = {
-          'A': [1, 1], 'B': [2, 2], 'BA': [2, 1],
-          'C': [1, 1], 'L': [1, 1], '2x': [2, 1],
+          A: [1, 1],
+          B: [2, 2],
+          BA: [2, 1],
+          C: [1, 1],
+          L: [1, 1],
+          "2x": [2, 1],
         };
         const c = codes[letterMatch[1]];
-        if (c) { sizeX = c[0]; sizeY = c[1]; }
+        if (c) {
+          sizeX = c[0];
+          sizeY = c[1];
+        }
       }
     }
   }
 
   if (sizeX !== null && sizeY === null) sizeY = sizeX;
   if (sizeX === null && sizeY !== null) sizeX = sizeY;
-  return (sizeX !== null) ? { x: sizeX, y: sizeY } : null;
+  return sizeX !== null ? { x: sizeX, y: sizeY } : null;
 }
 
 export function parseCatalogTags(tags, blueprint) {
@@ -169,7 +198,7 @@ export function parseCatalogTags(tags, blueprint) {
 
   const themeInfo = getCatalogThemeInfo(theme);
 
-  const fileName = blueprint?.file_name || blueprint?.blueprint_name || '';
+  const fileName = blueprint?.file_name || blueprint?.blueprint_name || "";
 
   return {
     _id: generateModelId(fileName, blueprint?.file_md5 || null),
@@ -182,9 +211,13 @@ export function parseCatalogTags(tags, blueprint) {
     size,
     format,
     attributes,
-    fileName: blueprint?.file_name || blueprint?.blueprint_name || '',
-    displayName: typeTags.filter(t => t !== primaryType).join('+').replace(/_/g, ' ') || primaryType,
-    source: 'catalog',
+    fileName: blueprint?.file_name || blueprint?.blueprint_name || "",
+    displayName:
+      typeTags
+        .filter((t) => t !== primaryType)
+        .join("+")
+        .replace(/_/g, " ") || primaryType,
+    source: "catalog",
     catalogId: blueprint?.id || null,
     sha: blueprint?.file_md5 || null,
     thumbnailUrl: blueprint?.images?.[0]?.image_url || null,
@@ -197,32 +230,42 @@ export function blueprintToModelInfo(blueprint) {
   return parseCatalogTags(blueprint.tags || [], blueprint);
 }
 
-export async function searchBlueprints({ require = [], deny = [], limit = 50, nextToken = null, prevToken = null, signal = null } = {}) {
+export async function searchBlueprints({
+  require = [],
+  deny = [],
+  limit = 50,
+  nextToken = null,
+  prevToken = null,
+  signal = null,
+} = {}) {
   const params = new URLSearchParams();
-  params.set('models', 'true');
-  params.set('blueprints', 'true');
-  if (limit) params.set('limit', String(limit));
-  if (nextToken) params.set('next', nextToken);
-  if (prevToken) params.set('previous', prevToken);
+  params.set("models", "true");
+  params.set("blueprints", "true");
+  if (limit) params.set("limit", String(limit));
+  if (nextToken) params.set("next", nextToken);
+  if (prevToken) params.set("previous", prevToken);
 
   const body = {};
-  if (require.length > 0) body.require = require.map(t => ({ tag: t }));
-  if (deny.length > 0) body.deny = deny.map(t => ({ tag: t }));
+  if (require.length > 0) body.require = require.map((t) => ({ tag: t }));
+  if (deny.length > 0) body.deny = deny.map((t) => ({ tag: t }));
 
   const url = `${API_BASE}/blueprints/tags?${params.toString()}`;
-  const resp = await fetchWithTimeout(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-    signal,
-  }, 30000);
+  const resp = await fetchWithTimeout(
+    url,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      signal,
+    },
+    30000,
+  );
 
   if (!resp.ok) throw new Error(`Catalog API error: ${resp.status}`);
   const data = await resp.json();
 
-
   return {
-    blueprints: (data.blueprints || []).map(b => ({
+    blueprints: (data.blueprints || []).map((b) => ({
       ...b,
       modelInfo: blueprintToModelInfo(b),
     })),
@@ -233,17 +276,18 @@ export async function searchBlueprints({ require = [], deny = [], limit = 50, ne
 
 export async function downloadBlueprintSTL(blueprint, onProgress) {
   const url = blueprint.storage_address || blueprint.modelInfo?.storageUrl;
-  if (!url) throw new Error('No storage address for blueprint');
+  if (!url) throw new Error("No storage address for blueprint");
 
   let fetchUrl = url;
-  if (url.startsWith('https://objects.openforge.tools/')) {
-    fetchUrl = '/catalog-objects' + url.replace('https://objects.openforge.tools', '');
+  if (url.startsWith("https://objects.openforge.tools/")) {
+    fetchUrl =
+      "/catalog-objects" + url.replace("https://objects.openforge.tools", "");
   }
 
   const resp = await fetchWithTimeout(fetchUrl, {}, 120000);
   if (!resp.ok) throw new Error(`Failed to download STL: ${resp.status}`);
 
-  const contentLength = parseInt(resp.headers.get('content-length') || '0');
+  const contentLength = parseInt(resp.headers.get("content-length") || "0");
   const reader = resp.body.getReader();
   const chunks = [];
   let received = 0;

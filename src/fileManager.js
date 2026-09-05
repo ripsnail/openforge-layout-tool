@@ -1,7 +1,7 @@
-import { setStorageItem, removeStorageItem } from './storage.js';
+import { setStorageItem, removeStorageItem } from "./storage.js";
 
-const FILES_KEY = 'openforge-files';
-const ACTIVE_KEY = 'openforge-active-file';
+const FILES_KEY = "openforge-files";
+const ACTIVE_KEY = "openforge-active-file";
 
 let files = [];
 let activeId = null;
@@ -11,7 +11,6 @@ function generateId() {
 }
 
 export function initFileManager() {
-
   let stored;
   try {
     stored = JSON.parse(localStorage.getItem(FILES_KEY));
@@ -21,14 +20,14 @@ export function initFileManager() {
 
   if (!stored || !Array.isArray(stored) || stored.length === 0) {
     const id = generateId();
-    files = [{ id, name: 'Untitled' }];
+    files = [{ id, name: "Untitled" }];
     activeId = files[0].id;
     saveIndex();
     saveActiveId();
   } else {
     files = stored;
     activeId = localStorage.getItem(ACTIVE_KEY);
-    if (!activeId || !files.find(f => f.id === activeId)) {
+    if (!activeId || !files.find((f) => f.id === activeId)) {
       activeId = files[0].id;
       saveActiveId();
     }
@@ -44,8 +43,8 @@ export function getActiveId() {
 }
 
 export function getActiveName() {
-  const f = files.find(f => f.id === activeId);
-  return f ? f.name : 'Untitled';
+  const f = files.find((f) => f.id === activeId);
+  return f ? f.name : "Untitled";
 }
 
 function saveIndex() {
@@ -57,7 +56,7 @@ function saveActiveId() {
 }
 
 function fileKey(id) {
-  return 'openforge-layout-' + id;
+  return "openforge-layout-" + id;
 }
 
 export function saveFileData(id, data) {
@@ -89,7 +88,7 @@ export function createFile(name, duplicate) {
 }
 
 export function renameFile(id, newName) {
-  const f = files.find(f => f.id === id);
+  const f = files.find((f) => f.id === id);
   if (f) {
     f.name = newName;
     saveIndex();
@@ -98,7 +97,7 @@ export function renameFile(id, newName) {
 
 export function deleteFile(id) {
   if (files.length <= 1) return false;
-  const idx = files.findIndex(f => f.id === id);
+  const idx = files.findIndex((f) => f.id === id);
   if (idx < 0) return false;
 
   files.splice(idx, 1);
@@ -114,7 +113,7 @@ export function deleteFile(id) {
 
 export function switchToFile(id) {
   if (id === activeId) return false;
-  if (!files.find(f => f.id === id)) return false;
+  if (!files.find((f) => f.id === id)) return false;
   activeId = id;
   saveActiveId();
   return true;
