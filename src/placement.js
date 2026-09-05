@@ -1375,7 +1375,7 @@ export class PlacementSystem {
       // If this model isn't already in the saved manifest, add it so the
       // browser keeps track of models referenced by loaded layouts.
       if (!entry) {
-        try { addDownloadedModelEntry(modelInfo); } catch (e) { /* non-fatal */ }
+        try { addDownloadedModelEntry(modelInfo); } catch (e) { console.warn('Failed to register downloaded model:', e); }
       }
       resolved.push({ item, modelInfo });
     }

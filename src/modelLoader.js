@@ -61,7 +61,7 @@ export function pruneGeometries(keepKeys) {
   const keep = keepKeys instanceof Set ? keepKeys : new Set(keepKeys || []);
   for (const key of [...geometryCache.keys()]) {
     if (!keep.has(key)) {
-      try { geometryCache.get(key)?.dispose(); } catch (e) { /* best effort */ }
+      try { geometryCache.get(key)?.dispose(); } catch (e) { console.warn('Failed to dispose cached geometry:', e); }
       geometryCache.delete(key);
     }
   }
@@ -124,10 +124,10 @@ async function fetchAndCacheGeometry(modelInfo, cacheKey, fileName) {
         let geometry = loader.parse(cached);
         geometry = convertZupToYup(geometry);
         centerGeometry(geometry);
-        lruSet(geometryCache, cacheKey, geometry, MODEL_CACHE_LIMITS.geometry, (k, g) => { try { g?.dispose(); } catch (e) { /* best effort */ } });
+        lruSet(geometryCache, cacheKey, geometry, MODEL_CACHE_LIMITS.geometry, (k, g) => { try { g?.dispose(); } catch (e) { console.warn('Failed to dispose cached geometry:', e); } });
         return { fromCdn: false, buffer: cached };
       }
-    } catch (e) { /* fall through to network */ }
+    } catch (e) { console.warn('Failed to read cached STL:', e); }
   }
 
   let resp = null;
@@ -161,13 +161,13 @@ async function fetchAndCacheGeometry(modelInfo, cacheKey, fileName) {
 
   // Persist to the browser cache so the next refresh skips the network.
   if (sha) {
-    try { await putCachedStlBuffer(sha, buffer); } catch (e) { /* best effort */ }
+    try { await putCachedStlBuffer(sha, buffer); } catch (e) { console.warn('Failed to cache STL in IndexedDB:', e); }
   }
 
   let geometry = loader.parse(buffer);
   geometry = convertZupToYup(geometry);
   centerGeometry(geometry);
-  lruSet(geometryCache, cacheKey, geometry, MODEL_CACHE_LIMITS.geometry, (k, g) => { try { g?.dispose(); } catch (e) { /* best effort */ } });
+  lruSet(geometryCache, cacheKey, geometry, MODEL_CACHE_LIMITS.geometry, (k, g) => { try { g?.dispose(); } catch (e) { console.warn('Failed to dispose cached geometry:', e); } });
 
   return { fromCdn, buffer };
 }
@@ -243,7 +243,7 @@ function getOrCreateMaterial(color) {
       flatShading: false,
     });
     material.userData.shared = true;
-    lruSet(materialCache, cacheKey, material, MODEL_CACHE_LIMITS.material, (k, m) => { try { m?.dispose(); } catch (e) { /* best effort */ } });
+    lruSet(materialCache, cacheKey, material, MODEL_CACHE_LIMITS.material, (k, m) => { try { m?.dispose(); } catch (e) { console.warn('Failed to dispose cached material:', e); } });
   }
   return material;
 }

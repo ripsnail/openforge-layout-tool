@@ -49,7 +49,7 @@ export async function getCachedStlBuffer(sha) {
     try {
       const wtx = db.transaction(STORE_NAME, 'readwrite');
       wtx.objectStore(STORE_NAME).put({ ...rec, updatedAt: Date.now() });
-    } catch (e) { /* best effort */ }
+    } catch (e) { console.warn('Failed to update STL cache recency:', e); }
     return rec.buffer;
   } catch (e) {
     return null;

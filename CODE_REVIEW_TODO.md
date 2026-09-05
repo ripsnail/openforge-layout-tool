@@ -122,7 +122,7 @@ below are the remaining gaps, bugs, and cleanup opportunities.
   the raycaster). Factor out the shared ray/plane math into one function
   parameterized by the screen point.
 
-- [ ] **Inconsistent empty-catch style**: most of the codebase uses
+- [x] **Inconsistent empty-catch style**: most of the codebase uses
   `catch (e) { /* best effort */ }` or similar comments, but a few spots
   (e.g. `_paste()` in [src/placement.js](src/placement.js)) use
   `console.warn` while sibling code paths silently swallow. Standardize on
