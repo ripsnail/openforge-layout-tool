@@ -31,7 +31,11 @@ import {
 import { getManifest, addDownloadedModelEntry } from "./downloadedModels.js";
 import { resolveTemplateTiles } from "./templates.js";
 import { saveFileData, loadFileData, getActiveId } from "./fileManager.js";
-import { fetchWithTimeout } from "./catalogApi.js";
+import {
+  blueprintToModelInfo,
+  fetchBlueprintById,
+  fetchWithTimeout,
+} from "./catalogApi.js";
 import { updateBom, updateModelCount } from "./placementUi.js";
 import { notify } from "./notifications.js";
 
@@ -1468,6 +1472,7 @@ export class PlacementSystem {
         rz: m.rotation.z,
         storageUrl: m.userData.modelInfo.storageUrl || null,
         catalogId: m.userData.modelInfo.catalogId || null,
+        sha: m.userData.modelInfo.sha || null,
         textureTags: getTextureOverride(m.userData.modelInfo.textureTags)
           ? m.userData.modelInfo.textureTags.filter((t) => t.override)
           : undefined,
@@ -1514,6 +1519,7 @@ export class PlacementSystem {
     // Phase 1 (sync): resolve model info for every tile — manifest lookup,
     // saved overrides. No I/O here.
     const resolved = [];
+    const blueprintPromises = new Map();
     for (const item of data) {
       let modelInfo;
       const entry = item._id ? manifest.find((m) => m._id === item._id) : null;
@@ -1522,7 +1528,46 @@ export class PlacementSystem {
         if (item._id) modelInfo._id = item._id;
         // NOTE: no color assignment here — createMesh() recomputes the color
         // via resolveModelColor(), so writing it would be redundant work.
-      } else continue;
+      } else if (item.catalogId) {
+        try {
+          if (!blueprintPromises.has(item.catalogId)) {
+            blueprintPromises.set(
+              item.catalogId,
+              fetchBlueprintById(item.catalogId),
+            );
+          }
+          const blueprint = await blueprintPromises.get(item.catalogId);
+          const catalogInfo = blueprint.modelInfo || blueprintToModelInfo(blueprint);
+          modelInfo = {
+            ...catalogInfo,
+            _id: item._id || catalogInfo._id,
+          };
+        } catch (e) {
+          console.warn(
+            `Failed to resolve catalog model ${item.catalogId}:`,
+            e,
+          );
+        }
+      }
+      // Older layouts may not have a catalog id. Their storage URL is still
+      // enough to fetch the STL, so keep a minimal model record as a fallback.
+      if (!modelInfo && item.storageUrl) {
+        modelInfo = {
+          _id: item._id || item.fileName,
+          fileName: item.fileName || item._id,
+          primaryType: "other",
+          typeTags: [],
+          textureTags: [],
+          theme: "plain",
+          storageUrl: item.storageUrl,
+          sha: item.sha || null,
+          catalogId: item.catalogId || null,
+        };
+      }
+      if (!modelInfo) {
+        console.warn("Layout tile has no resolvable model metadata:", item);
+        continue;
+      }
       if (item.storageUrl && !modelInfo.storageUrl) {
         modelInfo.storageUrl = item.storageUrl;
       }

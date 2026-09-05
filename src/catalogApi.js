@@ -230,6 +230,17 @@ export function blueprintToModelInfo(blueprint) {
   return parseCatalogTags(blueprint.tags || [], blueprint);
 }
 
+export async function fetchBlueprintById(id) {
+  if (!id) throw new Error("Blueprint id is required");
+  const resp = await fetchWithTimeout(
+    `${API_BASE}/blueprints/${encodeURIComponent(id)}`,
+    {},
+    30000,
+  );
+  if (!resp.ok) throw new Error(`Catalog API error: ${resp.status}`);
+  return resp.json();
+}
+
 export async function searchBlueprints({
   require = [],
   deny = [],
