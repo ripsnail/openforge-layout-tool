@@ -33,7 +33,7 @@ below are the remaining gaps, bugs, and cleanup opportunities.
 
 ## 2. Configuration / Security Hardening
 
-- [ ] **`docker-compose.yml` doesn't expose the catalog env vars.** Add
+- [x] **`docker-compose.yml` doesn't expose the catalog env vars.** Add
   `OPENFORGE_CATALOG_API_URL` / `OPENFORGE_CATALOG_OBJECTS_URL` (with
   sensible defaults or `.env` support) to the `environment:` block so
   Compose users aren't silently stuck on the vite.config.js hardcoded

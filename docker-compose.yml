@@ -10,3 +10,5 @@ services:
       - ./downloaded:/app/downloaded
     environment:
       - NODE_ENV=development
+      - OPENFORGE_CATALOG_API_URL=${OPENFORGE_CATALOG_API_URL:-https://staging.openforge.tools}
+      - OPENFORGE_CATALOG_OBJECTS_URL=${OPENFORGE_CATALOG_OBJECTS_URL:-https://objects.openforge.tools}
