@@ -609,12 +609,6 @@ function init() {
     }
   });
 
-  document.addEventListener("click", (e) => {
-    if (!e.target.closest("#new-file-wrapper")) {
-      closeAllMenus();
-    }
-  });
-
   const searchInput = document.getElementById("search-input");
   if (searchInput) {
     searchInput.focus();
