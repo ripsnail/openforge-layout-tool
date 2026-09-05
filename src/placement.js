@@ -9,9 +9,7 @@ import {
   pruneGeometries,
 } from "./modelLoader.js";
 import {
-  isWallTile,
   isBaseTile,
-  isColumnTile,
   isWallBaseTile,
   getTileFootprintMm,
   getThemeColor,
@@ -1200,15 +1198,6 @@ export class PlacementSystem {
       return this._snapSecretDoor(rawPoint, gridPoint, modelInfo);
     }
 
-    if (isBaseTile(modelInfo)) {
-      const stackTop = this._findStackTop(rawPoint);
-      if (stackTop != null) {
-        const gridPt = this._snapToGrid(rawPoint);
-        gridPt.y = stackTop;
-        return { position: gridPt, rotation: 0, type: "grid" };
-      }
-    }
-
     if (!isBaseTile(modelInfo)) {
       const base = this._findBaseAt(rawPoint);
       const y = base ? base.userData.height || 0 : 0;
@@ -1237,45 +1226,6 @@ export class PlacementSystem {
       }
     }
     return null;
-  }
-
-  _findStackTop(point) {
-    const supports = [];
-    for (const placed of this.placedMeshes) {
-      const pInfo = placed.userData.modelInfo;
-      if (!pInfo) continue;
-      const tileMeta = placed.userData.tileMeta;
-      if (
-        tileMeta
-          ? !tileMeta.isWall &&
-            !tileMeta.isColumn &&
-            !tileMeta.isWallBase &&
-            !tileMeta.isBase
-          : !isWallTile(pInfo) &&
-            !isColumnTile(pInfo) &&
-            !isWallBaseTile(pInfo) &&
-            !isBaseTile(pInfo)
-      )
-        continue;
-
-      const pf = tileMeta?.footprint || getTileFootprintMm(pInfo);
-      const pRot = placed.rotation.y;
-      const cos = Math.cos(pRot);
-      const sin = Math.sin(pRot);
-      const dx = point.x - placed.position.x;
-      const dz = point.z - placed.position.z;
-      // Test the cursor against the support's rotated footprint itself.
-      // Expanding both footprints made adjacent bases look like stack targets.
-      const localX = dx * cos - dz * sin;
-      const localZ = dx * sin + dz * cos;
-      if (Math.abs(localX) < pf.w / 2 && Math.abs(localZ) < pf.d / 2) {
-        const top = placed.position.y + (placed.userData.height || 0);
-        supports.push(top);
-      }
-    }
-
-    if (supports.length === 0) return null;
-    return Math.max(...supports);
   }
 
   _snapSecretDoor(rawPoint, gridPoint, modelInfo) {
