@@ -40,7 +40,7 @@ below are the remaining gaps, bugs, and cleanup opportunities.
   fallback. Also clean up the docker file and remove any folder path mappings
   that are not used.
 
-- [ ] **No `Content-Security-Policy` `frame-ancestors`/`X-Frame-Options`.**
+- [x] **No `Content-Security-Policy` `frame-ancestors`/`X-Frame-Options`.**
   [index.html](index.html) sets a solid CSP via `<meta>` but that tag
   cannot enforce `frame-ancestors` (must be a real HTTP header). If this
   app is ever hosted somewhere embeddable, add `X-Frame-Options: DENY` (or

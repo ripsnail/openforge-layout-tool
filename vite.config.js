@@ -141,6 +141,11 @@ function downloadedStlPlugin() {
   return {
     name: 'downloaded-stl',
     configureServer(server) {
+      server.middlewares.use((req, res, next) => {
+        res.setHeader('X-Frame-Options', 'DENY');
+        res.setHeader('Content-Security-Policy', "frame-ancestors 'none'");
+        next();
+      });
       server.middlewares.use('/metadata', (req, res, next) => {
         const raw = (req.url || '').replace(/^\//, '').replace(/\.stl$/, '');
         if (req.method === 'GET' && !raw) {
