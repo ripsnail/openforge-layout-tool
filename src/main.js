@@ -372,6 +372,7 @@ function initFileMenu(placement) {
       input.addEventListener("change", async () => {
         const file = input.files[0];
         if (!file) return;
+        setLoading(true);
         try {
           const text = await file.text();
           const data = JSON.parse(text);
@@ -381,6 +382,8 @@ function initFileMenu(placement) {
           notify(
             "Could not load that layout. Check that the file is valid JSON and try again.",
           );
+        } finally {
+          setLoading(false);
         }
       });
       input.click();
