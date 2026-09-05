@@ -81,7 +81,7 @@ below are the remaining gaps, bugs, and cleanup opportunities.
 
 ## 5. Performance / Memory
 
-- [ ] **Per-render network `HEAD` probes.** In
+- [x] **Per-render network `HEAD` probes.** In
   [src/downloadedModels.js](src/downloadedModels.js),
   `ensureCatalogThumbCached()` fires a `HEAD` request the first time each
   thumbnail URL is seen in a session (deduped via `catalogThumbSeen`, so

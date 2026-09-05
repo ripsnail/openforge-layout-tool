@@ -1,7 +1,9 @@
 import { blueprintToModelInfo, fetchWithTimeout } from './catalogApi.js';
 import { generateModelId, registerModelId } from './modelCatalog.js';
 import { notify } from './notifications.js';
+import { getStorageItem, setStorageItem } from './storage.js';
 const STORAGE_KEY = 'openforge-downloaded-models';
+const CATALOG_THUMB_CACHE_KEY = 'openforge-catalog-thumb-cache';
 
 const downloadCache = new Map();
 let manifest = [];
@@ -89,6 +91,22 @@ export function getThumbnailUrl(_id) {
 }
 
 const catalogThumbSeen = new Set();
+function loadCatalogThumbCache() {
+  try {
+    const cached = JSON.parse(getStorageItem(CATALOG_THUMB_CACHE_KEY, '[]'));
+    return Array.isArray(cached) ? cached : [];
+  } catch (e) {
+    console.warn('Failed to read cached catalog thumbnail list:', e);
+    return [];
+  }
+}
+
+const catalogThumbCached = new Set(loadCatalogThumbCache());
+
+function rememberCatalogThumb(key) {
+  catalogThumbCached.add(key);
+  setStorageItem(CATALOG_THUMB_CACHE_KEY, JSON.stringify([...catalogThumbCached]));
+}
 
 function thumbKeyForImageUrl(imageUrl) {
   const m = (imageUrl || '').match(/([0-9a-f]{32})\.png$/i);
@@ -99,12 +117,15 @@ export function ensureCatalogThumbCached(imageUrl) {
   if (!imageUrl) return null;
   const key = thumbKeyForImageUrl(imageUrl);
   const local = `/downloaded/thumbs/${key}.png`;
-  if (catalogThumbSeen.has(key)) return local;
+  if (catalogThumbSeen.has(key) || catalogThumbCached.has(key)) return local;
   catalogThumbSeen.add(key);
   (async () => {
     try {
       const head = await fetchWithTimeout(local, { method: 'HEAD' }, 15000);
-      if (head.ok) return;
+      if (head.ok) {
+        rememberCatalogThumb(key);
+        return;
+      }
     } catch (e) { /* fall through to cache it */ }
     try {
       let url = imageUrl;
@@ -114,7 +135,8 @@ export function ensureCatalogThumbCached(imageUrl) {
       const resp = await fetchWithTimeout(url, {}, 30000);
       if (!resp.ok) return;
       const buf = await resp.arrayBuffer();
-      await fetchWithTimeout(local, { method: 'POST', body: new Uint8Array(buf) }, 30000);
+      const saved = await fetchWithTimeout(local, { method: 'POST', body: new Uint8Array(buf) }, 30000);
+      if (saved.ok) rememberCatalogThumb(key);
     } catch (e) { /* best effort */ }
   })();
   return local;
