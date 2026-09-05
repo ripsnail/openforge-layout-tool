@@ -241,8 +241,7 @@ export class PlacementSystem {
       ghost.visible = true;
       ghost.position.copy(t.pos);
       ghost.rotation.set(t.rot.x, t.rot.y, t.rot.z);
-      const collision = this._checkCollision(t.pos, t.rot.y, t.modelInfo);
-      ghost.material.color.setHex(collision ? 0xcc4444 : 0x44cc88);
+      ghost.material.color.setHex(0x44cc88);
     }
     this._requestRenderFrame();
   }
@@ -1124,39 +1123,6 @@ export class PlacementSystem {
     return best;
   }
 
-  _checkCollision(point, rotation, modelInfo) {
-    const nf = getTileFootprintMm(modelInfo);
-    const nw = Math.abs(Math.cos(rotation)) * nf.w + Math.abs(Math.sin(rotation)) * nf.d;
-    const nd = Math.abs(Math.sin(rotation)) * nf.w + Math.abs(Math.cos(rotation)) * nf.d;
-    const newBottom = point.y || 0;
-    let newTop = newBottom;
-    if (this.activeGeometry) {
-      if (!this.activeGeometry.boundingBox) this.activeGeometry.computeBoundingBox();
-      newTop = newBottom + (this.activeGeometry.boundingBox.max.y || 0);
-    }
-
-    for (const placed of this.placedMeshes) {
-      const pInfo = placed.userData.modelInfo;
-      if (!pInfo) continue;
-      if (pInfo.primaryType !== modelInfo.primaryType) continue;
-
-      const pf = getTileFootprintMm(pInfo);
-      const pRot = placed.rotation.y;
-      const pw = Math.abs(Math.cos(pRot)) * pf.w + Math.abs(Math.sin(pRot)) * pf.d;
-      const pd = Math.abs(Math.sin(pRot)) * pf.w + Math.abs(Math.cos(pRot)) * pf.d;
-      const px = placed.position.x;
-      const pz = placed.position.z;
-
-      if (Math.abs(point.x - px) < (nw + pw) / 2 - 0.1 && Math.abs(point.z - pz) < (nd + pd) / 2 - 0.1) {
-        const placedBottom = placed.position.y || 0;
-        const placedTop = placedBottom + (placed.userData.height || 0);
-        const verticalOverlap = newBottom < placedTop && placedBottom < newTop;
-        if (verticalOverlap) return true;
-      }
-    }
-    return false;
-  }
-
   _updateGhost(point, rotation) {
     if (!this.activeGeometry) return;
 
@@ -1169,10 +1135,7 @@ export class PlacementSystem {
     this.ghostMesh.position.copy(point);
     this.ghostMesh.position.y += this._pendingPlaceHeight;
     this.ghostMesh.rotation.y = rotation || 0;
-
-    const gp = this.ghostMesh.position;
-    const collision = this._checkCollision(gp, rotation, this.activeModel);
-    this.ghostMesh.material.color.setHex(collision ? 0xcc4444 : 0x44cc88);
+    this.ghostMesh.material.color.setHex(0x44cc88);
 
     this._requestRenderFrame();
   }
