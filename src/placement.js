@@ -94,16 +94,12 @@ export class PlacementSystem {
 
   _setupEvents() {
     const target = document.querySelector('#viewport');
+    if (!target) return;
     target.addEventListener('pointerdown', this._onPointerDown);
     target.addEventListener('pointermove', this._onPointerMove);
     target.addEventListener('pointerup', this._onPointerUp);
     target.addEventListener('contextmenu', this._onContextMenu);
     window.addEventListener('keydown', this._onKeyDown);
-    target.addEventListener('pointerdown', (e) => {
-      if (this._contextMesh && !e.target.closest('#context-menu')) {
-        this._hideContextMenu();
-      }
-    });
   }
 
   setTool(tool) {
@@ -325,6 +321,9 @@ export class PlacementSystem {
   }
 
   _onPointerDown(e) {
+    if (this._contextMesh && !e.target.closest('#context-menu')) {
+      this._hideContextMenu();
+    }
     if (e.target.closest('#toolbar') || e.target.closest('.dropdown-menu')) return;
 
     const rect = e.currentTarget.getBoundingClientRect();
@@ -1468,9 +1467,12 @@ export class PlacementSystem {
 
   destroy() {
     const target = document.querySelector('#viewport');
+    if (!target) return;
     target.removeEventListener('pointerdown', this._onPointerDown);
     target.removeEventListener('pointermove', this._onPointerMove);
+    target.removeEventListener('pointerup', this._onPointerUp);
     target.removeEventListener('contextmenu', this._onContextMenu);
     window.removeEventListener('keydown', this._onKeyDown);
+    this._hideContextMenu();
   }
 }
