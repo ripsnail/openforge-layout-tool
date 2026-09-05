@@ -1,5 +1,6 @@
 import { blueprintToModelInfo, fetchWithTimeout } from './catalogApi.js';
 import { generateModelId, registerModelId } from './modelCatalog.js';
+import { notify } from './notifications.js';
 const STORAGE_KEY = 'openforge-downloaded-models';
 
 const downloadCache = new Map();
@@ -341,6 +342,7 @@ export async function importBlueprint(blueprint, stlArrayBuffer) {
     if (resp.ok) entry.savedToDisk = true;
   } catch (e) {
     console.warn('Failed to save STL to disk:', e);
+    notify(`Could not save ${fileName} to local storage. It may need to be downloaded again.`);
   }
 
   // Dedup by identity (content sha) or filename: re-importing replaces the

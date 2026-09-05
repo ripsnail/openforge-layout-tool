@@ -7,6 +7,7 @@ import { resolveTemplateTiles } from './templates.js';
 import { saveFileData, loadFileData, getActiveId } from './fileManager.js';
 import { fetchWithTimeout } from './catalogApi.js';
 import { updateBom, updateModelCount } from './placementUi.js';
+import { notify } from './notifications.js';
 
 const INCH = 25.4;
 const QUARTER_INCH = INCH / 4;
@@ -163,6 +164,9 @@ export class PlacementSystem {
     if (el) el.textContent = `Loading template: ${template.name}…`;
 
     const resolved = await resolveTemplateTiles(template);
+    if (resolved.length < template.tiles.length) {
+      notify(`${template.tiles.length - resolved.length} of ${template.tiles.length} template tiles could not be loaded.`);
+    }
     if (resolved.length === 0) {
       if (el) el.textContent = `Template "${template.name}" has no loadable models — import them from the catalog first  |  Esc to cancel`;
       return false;
@@ -912,6 +916,7 @@ export class PlacementSystem {
         cmds.push(new PlaceCommand(this, mesh));
       } catch (e) {
         console.warn('Paste load failed:', item.fileName);
+        notify(`Could not paste ${item.fileName || 'a tile'}.`);
       }
     }
 
@@ -1384,6 +1389,10 @@ export class PlacementSystem {
         return null;
       }
     }));
+    const failed = geos.filter(geo => !geo).length;
+    if (failed > 0) {
+      notify(`${failed} of ${resolved.length} layout tiles could not be loaded.`);
+    }
     // Phase 3: create meshes in saved order.
     for (let i = 0; i < resolved.length; i++) {
       if (!geos[i]) continue;

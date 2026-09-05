@@ -49,7 +49,7 @@ below are the remaining gaps, bugs, and cleanup opportunities.
 
 ## 3. Error Handling / UX
 
-- [ ] **Silent failures with no user feedback.** Many `catch` blocks across
+- [x] **Silent failures with no user feedback.** Many `catch` blocks across
   [src/placement.js](src/placement.js) (`_paste()`, `_loadFromData()`),
   [src/templates.js](src/templates.js) (`resolveTemplateTiles()`), and
   [src/downloadedModels.js](src/downloadedModels.js) only `console.warn`/
