@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { loadModelGeometry, createMesh, createGhostMesh, createOutlineMesh, recolorMesh, disposeMeshMaterial, pruneGeometries } from './modelLoader.js';
-import { isWallTile, isBaseTile, isColumnTile, isWallBaseTile, getTileFootprintMm, parseModelFilename, getThemeColor, TEXTURE_OPTIONS, getTextureOverride, setTextureOverride, getEffectiveTextureTags, deriveTextureTags, formatTextureTag, escapeHtml, applyFilenameTextureOverrides } from './modelCatalog.js';
+import { isWallTile, isBaseTile, isColumnTile, isWallBaseTile, getTileFootprintMm, getThemeColor, TEXTURE_OPTIONS, getTextureOverride, setTextureOverride, getEffectiveTextureTags, deriveTextureTags, formatTextureTag, escapeHtml } from './modelCatalog.js';
 import { UndoRedoManager, PlaceCommand, RemoveCommand, MoveCommand, RotateCommand, GroupRotateCommand, BatchCommand } from './undoRedo.js';
 import { getManifest, syncMetadataToServer, saveManifest, addDownloadedModelEntry } from './downloadedModels.js';
 import { resolveTemplateTiles } from './templates.js';
@@ -865,9 +865,7 @@ export class PlacementSystem {
       if (sourceMesh) {
         modelInfo = { ...sourceMesh.userData.modelInfo };
       } else {
-        modelInfo = parseModelFilename(item.fileName);
-        if (item._id) modelInfo._id = item._id;
-        if (item.storageUrl) modelInfo.storageUrl = item.storageUrl;
+        continue;
       }
       try {
         const geo = await loadModelGeometry(modelInfo);
@@ -1365,10 +1363,7 @@ export class PlacementSystem {
         }
         // NOTE: no color assignment here — createMesh() recomputes the color
         // via resolveModelColor(), so writing it would be redundant work.
-      } else {
-        modelInfo = parseModelFilename(item.fileName);
-        if (item._id) modelInfo._id = item._id;
-      }
+      } else continue;
       if (item.storageUrl && !modelInfo.storageUrl) {
         modelInfo.storageUrl = item.storageUrl;
       }
@@ -1381,8 +1376,6 @@ export class PlacementSystem {
       if (item.textureTags && item.textureTags.length > 0) {
         modelInfo.textureTags = setTextureOverride(modelInfo.textureTags, item.textureTags[0].name);
       }
-      // Ensure any filename-based texture overrides are applied.
-      applyFilenameTextureOverrides(modelInfo);
       // If this model isn't already in the saved manifest, add it so the
       // browser keeps track of models referenced by loaded layouts.
       if (!entry) {

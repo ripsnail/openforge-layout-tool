@@ -3,20 +3,6 @@ import { getOverride, applyOverride } from './modelOverrides.js';
 let _nextModelId = 1;
 const _usedIds = new Set();
 
-// Filename -> texture name overrides. Edit this map to add more
-// special-case texture defaults without changing code logic.
-const FILENAME_TEXTURE_OVERRIDES = {
-  'towne#floor+wall+s2w.2x2.openforge.stl': 'wood',
-};
-
-export function applyFilenameTextureOverrides(modelInfo) {
-  if (!modelInfo || !modelInfo.fileName) return modelInfo;
-  const tex = FILENAME_TEXTURE_OVERRIDES[modelInfo.fileName];
-  if (!tex) return modelInfo;
-  modelInfo.textureTags = setTextureOverride(modelInfo.textureTags, tex);
-  return modelInfo;
-}
-
 export function registerModelId(id) {
   _usedIds.add(id);
 }
@@ -59,7 +45,6 @@ const THEME_COLORS = {
   'aztlan': 0x8a7a5a,
   'streets': 0x8a7a6a,
   'shingles': 0xb05a3c,
-  // Merge version colors here so versions are treated like normal themes.
   'stucco': 0xd4c4a8,
   'bricks_sidewalk': 0xb05a3c,
 };
@@ -89,6 +74,8 @@ export const THEME_LABELS = {
   'aztlan': 'Aztlan',
   'streets': 'Streets',
   'shingles': 'Shingles',
+  'stucco': 'Stucco',
+  'bricks_sidewalk': 'Bricks/Sidewalk',
 };
 
 function hashStringToColor(str) {
@@ -101,29 +88,6 @@ function hashStringToColor(str) {
   const b = hash & 0xff;
   return ((r & 0xf0) << 4) | ((g & 0xf0)) | ((b & 0xf0) >> 4);
 }
-
-const SIZE_LETTER_CODES = {
-  'A': { x: 1, y: 1 },
-  'B': { x: 2, y: 2 },
-  'BA': { x: 2, y: 1 },
-  'C': { x: 1, y: 1 },
-  'L': { x: 1, y: 1 },
-  'col+L': { x: 1, y: 1 },
-  '1.5': { x: 1.5, y: 1.5 },
-  '2x': { x: 2, y: 1 },
-};
-
-const WALL_SIZE_LETTER_CODES = {
-  'A': { x: 2, y: 0.5 },
-  'B': { x: 2, y: 0.5 },
-  'BA': { x: 1.5, y: 0.5 },
-  'C': { x: 1, y: 0.5 },
-  'L': { x: 1, y: 0.5 },
-  'col+L': { x: 1, y: 0.5 },
-  '2x': { x: 2, y: 0.5 },
-};
-
-const KNOWN_ATTRIBUTES = ['side'];
 
 const TYPE_ICONS = {
   'floor': '▦',
@@ -275,118 +239,12 @@ export const TEXTURE_OPTIONS = [
   { name: 'aztlan', label: 'Aztlan' },
   { name: 'streets', label: 'Streets' },
   { name: 'shingles', label: 'Shingles' },
+  { name: 'stucco', label: 'Stucco' },
+  { name: 'bricks_sidewalk', label: 'Bricks/Sidewalk' },
 ];
 
 export function getThemeLabel(theme) {
   return THEME_LABELS[theme] || theme.replace(/[+_%-]/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-}
-
-function splitTypeTags(typePart) {
-  const parts = typePart ? typePart.split('+') : [];
-  const result = [];
-  for (const p of parts) {
-    const sub = p.split(',');
-    for (const s of sub) {
-      if (s) result.push(s);
-    }
-  }
-  return result;
-}
-
-function parseLetterCode(p, typeTags = []) {
-  const isWall = typeTags.includes('wall') || typeTags.includes('base+wall');
-  const codes = isWall ? WALL_SIZE_LETTER_CODES : SIZE_LETTER_CODES;
-  
-  if (codes[p]) return codes[p];
-  const base = p.split('+')[0];
-  return codes[base] || null;
-}
-
-export function parseModelFilename(filename) {
-  const name = filename.replace(/\.stl$/i, '');
-  const afterHash = name.split('#');
-  const theme = afterHash[0];
-  const rest = afterHash[1] || '';
-
-  const dotParts = rest.split('.');
-
-  const typePart = dotParts[0];
-  const typeTags = splitTypeTags(typePart);
-
-  let size = null;
-  let format = null;
-  let attributes = [];
-
-  for (let i = 1; i < dotParts.length; i++) {
-    const p = dotParts[i];
-
-    if (/^\d+x\d+$/.test(p)) {
-      const [sx, sy] = p.split('x').map(Number);
-      size = { x: sx, y: sy };
-      continue;
-    }
-
-    const letterSize = parseLetterCode(p, typeTags);
-    if (letterSize) {
-      size = letterSize;
-      continue;
-    }
-
-    if (p.includes(',')) {
-      const commaIdx = p.indexOf(',');
-      format = format || p.slice(0, commaIdx);
-      attributes = p.slice(commaIdx + 1).split(',');
-      continue;
-    }
-
-    if (KNOWN_ATTRIBUTES.includes(p)) {
-      attributes.push(p);
-      continue;
-    }
-
-    format = format || p;
-  }
-
-  let primaryType = detectPrimaryType(typeTags);
-  if (PRIMARY_TYPE_OVERRIDES[filename]) {
-    primaryType = PRIMARY_TYPE_OVERRIDES[filename];
-  }
-  const connCaps = getConnectionCapabilities(typeTags, primaryType, size);
-
-  let modelInfo = {
-    _id: generateModelId(filename),
-    theme,
-    themeLabel: getThemeLabel(theme),
-    color: getThemeColor(theme),
-    typeTags,
-    primaryType,
-    size,
-    format,
-    attributes,
-    fileName: filename,
-    displayName: typeTags.join('+').replace(/_/g, ' '),
-    connCaps,
-    source: 'local',
-    // Filename theme prefixes like "shingles,stucco" carry the texture sets.
-    // Capture them so menus and the colour tracker work even when no raw
-    // catalog tags are available (e.g. layout-restore fallback).
-    textureTags: theme.split(/[,+]/).map(s => s.trim()).filter(s => s && s !== 'plain').map(name => ({ name, isVersion: false, tag: `texture|${name}` })),
-  };
-
-  modelInfo = applyOverride(modelInfo);
-
-  // Apply any filename-based texture overrides from the map.
-  applyFilenameTextureOverrides(modelInfo);
-
-  return modelInfo;
-}
-
-function detectPrimaryType(tags) {
-  const order = ['floor', 'base', 'wall', 'column', 'corner'];
-  for (const t of order) {
-    if (tags.includes(t)) return t;
-  }
-  return tags[0] || 'other';
 }
 
 export function getTypeIcon(type) {
@@ -422,10 +280,6 @@ export function isWallBaseTile(modelInfo) {
          !modelInfo.typeTags.includes('s2w');
 }
 
-const PRIMARY_TYPE_OVERRIDES = {
-  'dungeon_stone#magnetic.A.openforge.stl': 'wall',
-};
-
 export function getTileFootprintMm(modelInfo) {
   if (modelInfo.customFootprint) {
     return { ...modelInfo.customFootprint };
@@ -455,73 +309,4 @@ export function getTileFootprintMm(modelInfo) {
     w: (modelInfo.size?.x || 2) * 25.4,
     d: (modelInfo.size?.y || 2) * 25.4,
   };
-}
-
-function getConnectionCapabilities(typeTags, primaryType, size) {
-  const defaults = { tileW: 50.8, tileD: 50.8 };
-  if (primaryType === 'wall') {
-    defaults.tileW = (size?.x || 1) * 25.4;
-    defaults.tileD = 12.7;
-  } else if (primaryType === 'column') {
-    defaults.tileW = 25.4;
-    defaults.tileD = 25.4;
-  } else if (primaryType === 'base') {
-    const isWallBase = typeTags.includes('wall') && !typeTags.includes('s2w');
-    if (isWallBase) {
-      defaults.tileW = (size?.x || 1) * 25.4;
-      defaults.tileD = (size?.y || 1) * 25.4;
-    } else {
-      defaults.tileW = (size?.x || 2) * 25.4;
-      defaults.tileD = (size?.y || 2) * 25.4;
-    }
-  } else {
-    defaults.tileW = (size?.x || 2) * 25.4;
-    defaults.tileD = (size?.y || 2) * 25.4;
-  }
-
-  const caps = {
-    category: 'other',
-    acceptsWall: false,
-    acceptsFloor: false,
-    snapsTo: [],
-    edgeProfile: null,
-    tileW: defaults.tileW,
-    tileD: defaults.tileD,
-  };
-
-  if (primaryType === 'floor') {
-    caps.category = 'floor';
-    caps.acceptsFloor = true;
-    caps.snapsTo = ['floor', 'base'];
-
-    if (typeTags.includes('s2w')) {
-      caps.acceptsWall = true;
-      caps.edgeProfile = 's2w';
-    }
-    if (typeTags.includes('corner')) {
-      caps.edgeProfile = caps.edgeProfile ? 's2w+corner' : 'corner';
-    }
-  } else if (primaryType === 'wall') {
-    caps.category = 'wall';
-    caps.snapsTo = ['floor', 'base'];
-  } else if (primaryType === 'base') {
-    caps.category = 'base';
-    caps.acceptsFloor = true;
-    caps.snapsTo = ['floor', 'base'];
-    if (typeTags.includes('s2w')) {
-      caps.acceptsWall = true;
-      caps.edgeProfile = 's2w';
-    } else if (typeTags.includes('wall')) {
-      caps.acceptsWall = true;
-      caps.edgeProfile = 'separate-wall';
-    }
-  } else if (primaryType === 'column') {
-    caps.category = 'column';
-    caps.snapsTo = ['wall', 'floor'];
-  } else if (primaryType === 'corner') {
-    caps.category = 'corner';
-    caps.snapsTo = ['floor', 'wall'];
-  }
-
-  return caps;
 }

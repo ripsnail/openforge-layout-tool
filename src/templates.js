@@ -1,5 +1,4 @@
 import { loadModelGeometry } from './modelLoader.js';
-import { parseModelFilename } from './modelCatalog.js';
 import { getManifest } from './downloadedModels.js';
 
 const INCH = 25.4;
@@ -106,16 +105,12 @@ export async function resolveTemplateTiles(template) {
     const file = tile.file || tile.fileName;
     let modelInfo;
     const entry = tile._id ? manifest.find(m => m._id === tile._id) : null;
-    const entryByFile = !entry && file ? manifest.find(m => m.fileName === file) : null;
-    const useEntry = entry || entryByFile;
-    if (useEntry?.modelInfo) {
-      modelInfo = { ...useEntry.modelInfo };
-      if (tile._id) modelInfo._id = tile._id;
-    } else {
-      if (!file) continue;
-      modelInfo = parseModelFilename(file);
-      if (tile._id) modelInfo._id = tile._id;
-    }
+    const entryBySha = !entry && tile.sha ? manifest.find(m => m.sha === tile.sha || m.modelInfo?.sha === tile.sha) : null;
+    const entryByFile = !entry && !entryBySha && file ? manifest.find(m => m.fileName === file) : null;
+    const useEntry = entry || entryBySha || entryByFile;
+    if (!useEntry?.modelInfo) continue;
+    modelInfo = { ...useEntry.modelInfo };
+    if (tile._id) modelInfo._id = tile._id;
     if (tile.storageUrl && !modelInfo.storageUrl) {
       modelInfo.storageUrl = tile.storageUrl;
     }

@@ -242,6 +242,7 @@ export async function hydrateMetadataFromServer() {
 
   const pruned = [];
   const kept = [];
+  let metadataChanged = false;
   for (const m of manifest) {
     const sha = m.sha || m.modelInfo?.sha;
     const row = sha ? serverRows.get(sha) : null;
@@ -251,10 +252,24 @@ export async function hydrateMetadataFromServer() {
     if (sha && healthyDb && row && row.stl_cached !== true) {
       pruned.push(m._id);
     } else {
+      if (row) {
+        const { stl_cached, ...metadata } = row;
+        m.fileName = metadata.fileName || m.fileName;
+        m.sha = metadata.sha || m.sha;
+        m.catalogId = metadata.catalogId || m.catalogId || null;
+        m.storageUrl = metadata.storageUrl || m.storageUrl || null;
+        m.modelInfo = {
+          ...m.modelInfo,
+          ...metadata,
+          _id: m._id,
+          source: 'downloaded',
+        };
+        metadataChanged = true;
+      }
       kept.push(m);
     }
   }
-  if (pruned.length > 0) {
+  if (pruned.length > 0 || metadataChanged) {
     manifest = kept;
     for (const _id of pruned) {
       const cached = downloadCache.get(_id);
