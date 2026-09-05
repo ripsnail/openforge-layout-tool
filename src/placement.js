@@ -1193,7 +1193,7 @@ export class PlacementSystem {
     this.undoRedo.execute(new GroupRotateCommand(snapshots));
   }
 
-  _snapWithConnections(rawPoint, modelInfo, placeRotation) {
+  _snapWithConnections(rawPoint, modelInfo, _placeRotation) {
     const gridPoint = this._snapToGrid(rawPoint);
 
     if (modelInfo.typeTags.includes("secret_door")) {
@@ -1201,7 +1201,7 @@ export class PlacementSystem {
     }
 
     if (isBaseTile(modelInfo)) {
-      const stackTop = this._findStackTop(rawPoint, modelInfo, placeRotation);
+      const stackTop = this._findStackTop(rawPoint);
       if (stackTop != null) {
         const gridPt = this._snapToGrid(rawPoint);
         gridPt.y = stackTop;
@@ -1239,17 +1239,7 @@ export class PlacementSystem {
     return null;
   }
 
-  _findStackTop(point, modelInfo, rotation) {
-    const activeFp = getTileFootprintMm(modelInfo);
-    const nw =
-      Math.abs(Math.cos(rotation)) * activeFp.w +
-      Math.abs(Math.sin(rotation)) * activeFp.d;
-    const nd =
-      Math.abs(Math.sin(rotation)) * activeFp.w +
-      Math.abs(Math.cos(rotation)) * activeFp.d;
-    const halfW = nw / 2;
-    const halfD = nd / 2;
-
+  _findStackTop(point) {
     const supports = [];
     for (const placed of this.placedMeshes) {
       const pInfo = placed.userData.modelInfo;
@@ -1270,16 +1260,15 @@ export class PlacementSystem {
 
       const pf = tileMeta?.footprint || getTileFootprintMm(pInfo);
       const pRot = placed.rotation.y;
-      const pw =
-        Math.abs(Math.cos(pRot)) * pf.w + Math.abs(Math.sin(pRot)) * pf.d;
-      const pd =
-        Math.abs(Math.sin(pRot)) * pf.w + Math.abs(Math.cos(pRot)) * pf.d;
-
-      const overlapX =
-        Math.abs(point.x - placed.position.x) <= (halfW + pw) / 2;
-      const overlapZ =
-        Math.abs(point.z - placed.position.z) <= (halfD + pd) / 2;
-      if (overlapX && overlapZ) {
+      const cos = Math.cos(pRot);
+      const sin = Math.sin(pRot);
+      const dx = point.x - placed.position.x;
+      const dz = point.z - placed.position.z;
+      // Test the cursor against the support's rotated footprint itself.
+      // Expanding both footprints made adjacent bases look like stack targets.
+      const localX = dx * cos - dz * sin;
+      const localZ = dx * sin + dz * cos;
+      if (Math.abs(localX) < pf.w / 2 && Math.abs(localZ) < pf.d / 2) {
         const top = placed.position.y + (placed.userData.height || 0);
         supports.push(top);
       }
