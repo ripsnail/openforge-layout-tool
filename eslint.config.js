@@ -36,22 +36,10 @@ export default [
     rules: unusedCodeRules,
   },
   {
-    files: ['vite.config.js'],
+    files: ['vite.config.js', 'server/**/*.js'],
     languageOptions: {
       ecmaVersion: 'latest',
       sourceType: 'module',
-      globals: globals.node,
-    },
-    plugins: {
-      'unused-imports': unusedImports,
-    },
-    rules: unusedCodeRules,
-  },
-  {
-    files: ['tests/**/*.cjs'],
-    languageOptions: {
-      ecmaVersion: 'latest',
-      sourceType: 'commonjs',
       globals: globals.node,
     },
     plugins: {

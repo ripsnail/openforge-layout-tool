@@ -1,29 +1,23 @@
 import { defineConfig } from 'vite';
 import { writeFileSync, mkdirSync, existsSync, readFileSync, unlinkSync, readdirSync } from 'fs';
-import { join, resolve } from 'path';
+import { join } from 'path';
 import { DatabaseSync } from 'node:sqlite';
+import { isValidMd5, safeDownloadedPath, findCachedByMd5 as findCachedByMd5Pure } from './server/pathUtils.js';
 
 const MAX_JSON_BODY_BYTES = 1024 * 1024 * 20; // 20 MB
 
-function safeDownloadedPath(dir, fileName) {
-  if (!fileName || fileName.includes('\0')) return null;
-  const root = resolve(dir);
-  const filePath = resolve(root, fileName);
-  if (filePath !== root && !filePath.startsWith(`${root}/`)) return null;
-  return filePath;
+// Dev-server proxy targets. Override via env vars so this can point at a
+// local/staging/production catalog without editing source.
+const CATALOG_API_URL = process.env.OPENFORGE_CATALOG_API_URL || 'https://staging.openforge.tools';
+const CATALOG_OBJECTS_URL = process.env.OPENFORGE_CATALOG_OBJECTS_URL || 'https://objects.openforge.tools';
+
+function rejectPath(reason, value) {
+  console.warn(`[downloaded-stl] rejected request: ${reason}`, value);
+  return null;
 }
 
 function findCachedByMd5(dir, md5) {
-  const exact = join(dir, `${md5}.stl`);
-  if (existsSync(exact)) return exact;
-
-  if (existsSync(dir)) {
-    const prefix = `${md5}.stl_`;
-    for (const f of readdirSync(dir)) {
-      if (f.startsWith(prefix) && f.endsWith('.stl')) return join(dir, f);
-    }
-  }
-  return null;
+  return findCachedByMd5Pure(dir, md5, { existsSync, readdirSync });
 }
 
 function openMetadataDb(dir) {
@@ -130,7 +124,8 @@ function downloadedStlPlugin() {
           return;
         }
         const sha = raw.toLowerCase();
-        if (!/^[0-9a-f]{32}$/.test(sha)) {
+        if (!isValidMd5(sha)) {
+          rejectPath('invalid sha in /metadata request', raw);
           res.writeHead(400); res.end('Bad request');
           return;
         }
@@ -180,7 +175,8 @@ function downloadedStlPlugin() {
       });
       server.middlewares.use('/getModel', (req, res) => {
         const md5 = (req.url || '').replace(/^\//, '').replace(/\.stl$/, '');
-        if (!/^[0-9a-f]{32}$/i.test(md5)) {
+        if (!isValidMd5(md5)) {
+          rejectPath('invalid md5 in /getModel request', md5);
           res.writeHead(400); res.end('Bad request');
           return;
         }
@@ -206,6 +202,7 @@ function downloadedStlPlugin() {
               const fileName = decodeURIComponent(req.url.slice(1));
               const filePath = safeDownloadedPath(dir, fileName);
               if (!filePath) {
+                rejectPath('invalid filename in /downloaded POST', fileName);
                 res.writeHead(400);
                 res.end('Invalid filename');
                 return;
@@ -229,6 +226,7 @@ function downloadedStlPlugin() {
           const fileName = decodeURIComponent(req.url.slice(1));
           const filePath = safeDownloadedPath(dir, fileName);
           if (!filePath) {
+            rejectPath('invalid filename in /downloaded GET/HEAD', fileName);
             next();
             return;
           }
@@ -248,6 +246,7 @@ function downloadedStlPlugin() {
           const fileName = decodeURIComponent(req.url.slice(1));
           const filePath = safeDownloadedPath(dir, fileName);
           if (!filePath) {
+            rejectPath('invalid filename in /downloaded DELETE', fileName);
             next();
             return;
           }
@@ -276,12 +275,12 @@ export default defineConfig({
     },
     proxy: {
       '/catalog-api': {
-        target: 'https://staging.openforge.tools',
+        target: CATALOG_API_URL,
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/catalog-api/, '/api'),
       },
       '/catalog-objects': {
-        target: 'https://objects.openforge.tools',
+        target: CATALOG_OBJECTS_URL,
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/catalog-objects/, ''),
       },

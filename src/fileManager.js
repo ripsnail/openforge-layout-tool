@@ -2,7 +2,6 @@ import { setStorageItem, removeStorageItem } from './storage.js';
 
 const FILES_KEY = 'openforge-files';
 const ACTIVE_KEY = 'openforge-active-file';
-const LEGACY_KEY = 'openforge-layout';
 
 let files = [];
 let activeId = null;
@@ -21,16 +20,8 @@ export function initFileManager() {
   }
 
   if (!stored || !Array.isArray(stored) || stored.length === 0) {
-    const legacyData = localStorage.getItem(LEGACY_KEY);
-    if (legacyData) {
-      const id = generateId();
-      files = [{ id, name: 'Untitled' }];
-      setStorageItem('openforge-layout-' + id, legacyData);
-      removeStorageItem(LEGACY_KEY);
-    } else {
-      const id = generateId();
-      files = [{ id, name: 'Untitled' }];
-    }
+    const id = generateId();
+    files = [{ id, name: 'Untitled' }];
     activeId = files[0].id;
     saveIndex();
     saveActiveId();

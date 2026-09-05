@@ -1,8 +1,8 @@
 import * as THREE from 'three';
 import { loadModelGeometry, createMesh, createGhostMesh, createOutlineMesh, recolorMesh, disposeMeshMaterial, pruneGeometries } from './modelLoader.js';
-import { isWallTile, isBaseTile, isColumnTile, isWallBaseTile, getTileFootprintMm, getThemeColor, TEXTURE_OPTIONS, getTextureOverride, setTextureOverride, getEffectiveTextureTags, deriveTextureTags, formatTextureTag } from './modelCatalog.js';
+import { isWallTile, isBaseTile, isColumnTile, isWallBaseTile, getTileFootprintMm, getThemeColor, TEXTURE_OPTIONS, getTextureOverride, setTextureOverride, getEffectiveTextureTags, formatTextureTag } from './modelCatalog.js';
 import { UndoRedoManager, PlaceCommand, RemoveCommand, MoveCommand, RotateCommand, GroupRotateCommand, BatchCommand } from './undoRedo.js';
-import { getManifest, syncMetadataToServer, saveManifest, addDownloadedModelEntry } from './downloadedModels.js';
+import { getManifest, addDownloadedModelEntry } from './downloadedModels.js';
 import { resolveTemplateTiles } from './templates.js';
 import { saveFileData, loadFileData, getActiveId } from './fileManager.js';
 import { fetchWithTimeout } from './catalogApi.js';
@@ -1346,7 +1346,7 @@ export class PlacementSystem {
   async _loadFromData(data) {
     const manifest = getManifest();
     // Phase 1 (sync): resolve model info for every tile — manifest lookup,
-    // legacy heals, saved overrides. No I/O here.
+    // saved overrides. No I/O here.
     const resolved = [];
     for (const item of data) {
       let modelInfo;
@@ -1354,19 +1354,6 @@ export class PlacementSystem {
       if (entry?.modelInfo) {
         modelInfo = { ...entry.modelInfo };
         if (item._id) modelInfo._id = item._id;
-        // Heal legacy entries stored before textureTags existed: derive from
-        // the raw tags and push the healed record back to the metadata DB.
-        if ((!modelInfo.textureTags || modelInfo.textureTags.length === 0) && modelInfo.tags?.length > 0) {
-          const healed = deriveTextureTags(modelInfo.tags);
-          if (healed.length > 0) {
-            modelInfo.textureTags = healed;
-            entry.modelInfo = { ...entry.modelInfo, textureTags: healed };
-            try { saveManifest(); } catch (e) { /* non-fatal */ }
-            if (modelInfo.sha) {
-              try { syncMetadataToServer(modelInfo); } catch (e) { /* non-fatal */ }
-            }
-          }
-        }
         // NOTE: no color assignment here — createMesh() recomputes the color
         // via resolveModelColor(), so writing it would be redundant work.
       } else continue;
