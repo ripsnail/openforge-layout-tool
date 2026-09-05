@@ -29,7 +29,30 @@ The Compose configuration mounts the source files for development and keeps down
 docker compose down
 ```
 
-### Configure catalog endpoints
+## Examples
+
+The repository includes several example layouts in the [`layouts/`](layouts/) folder. To try one, start the application, choose **File → Load Layout**, and select one of the JSON files:
+
+- [`Dungeon.json`](layouts/Dungeon.json) — a simple stone dungeon layout with rooms, and a central chamber.
+- [`Warehouse.json`](layouts/Warehouse.json) — a large open layout using Towne set.
+- [`Towne House.json`](layouts/Towne%20House.json) — a Townehouse.
+- [`openforge-tutorials-1.json`](layouts/openforge-tutorials-1.json) — Replication of the first community creation here https://masterworktools.github.io/openforge-tutorials/.
+
+The layouts will download any models they need the first time they are imported, so the initial load can take a little longer.
+
+### Dungeon
+
+![Dungeon example layout](screenshots/Dungeon%20Demo.png)
+
+### Towne House
+
+![Towne House example layout](screenshots/Towne%20House%20Demo.png)
+
+### OpenForge tutorial
+
+![OpenForge tutorial example layout](screenshots/openforge-demo-1.png)
+
+## Configure catalog endpoints
 
 Compose uses these defaults:
 
@@ -50,45 +73,6 @@ You can also put the variables in a `.env` file beside `docker-compose.yml`; Com
 OPENFORGE_CATALOG_API_URL=https://staging.openforge.tools
 OPENFORGE_CATALOG_OBJECTS_URL=https://objects.openforge.tools
 ```
-
-## Alternative setup: local Node.js
-
-A local installation is available if Docker is not suitable.
-
-### Requirements
-
-- Node.js 24 or newer
-- npm
-- Browser with WebGL support
-- Network access to the configured catalog endpoints
-- Write access to the project’s `downloaded/` directory, which stores locally downloaded models and metadata
-
-Node.js 24 is recommended because the development server uses Node’s built-in SQLite support for downloaded-model metadata.
-
-### Install and run
-
-```sh
-npm ci
-npm run dev
-```
-
-Open [http://localhost:5173](http://localhost:5173) in a browser. The development server is bound to the host interface by the `--host` option.
-
-Set catalog endpoints before starting the server if needed:
-
-```sh
-OPENFORGE_CATALOG_API_URL=https://catalog.example.com \\
-OPENFORGE_CATALOG_OBJECTS_URL=https://objects.example.com \\
-npm run dev
-```
-
-## Available commands
-
-| Command | Purpose |
-| --- | --- |
-| `npm run dev` | Start the Vite development server. |
-| `npm run lint` | Run ESLint across the project. |
-| `npm run audit` | Check dependencies for moderate-or-higher vulnerabilities. |
 
 ## Using the application
 

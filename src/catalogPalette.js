@@ -160,6 +160,7 @@ export function initPalette(onSelectModel) {
   let catalogAbortController = null;
   let catalogPaging = { total_count: 0 };
   let nextToken = null;
+  let lastCatalogSearch = null;
   let activeTab = "saved";
 
   const urlState = readURLState();
@@ -215,7 +216,10 @@ export function initPalette(onSelectModel) {
     if (activeTab === "saved") {
       renderLocalModels();
     } else if (activeTab === "catalog") {
-      if (catalogResults.length === 0 && !isLoadingCatalog) {
+      if (
+        !isLoadingCatalog &&
+        (catalogResults.length === 0 || filterText !== lastCatalogSearch)
+      ) {
         loadCatalogResults();
         return;
       }
@@ -509,10 +513,13 @@ export function initPalette(onSelectModel) {
         deny: deniedTags,
         limit: 50,
         nextToken: append ? nextToken : null,
+        search: filterText,
         signal: controller.signal,
       });
 
       if (requestId !== catalogRequestId) return;
+
+      lastCatalogSearch = filterText;
 
       if (append) {
         catalogResults = [...catalogResults, ...result.blueprints];
@@ -967,10 +974,25 @@ export function initPalette(onSelectModel) {
     }
   }
 
+  let catalogSearchDebounce = null;
   searchInput.addEventListener("input", (e) => {
     filterText = e.target.value;
     writeURLState(selectedTags, deniedTags, activeTab, filterText);
-    render();
+    if (activeTab === "catalog") {
+      clearTimeout(catalogSearchDebounce);
+      if (catalogAbortController) {
+        catalogAbortController.abort();
+        catalogAbortController = null;
+        catalogRequestId++;
+        isLoadingCatalog = false;
+      }
+      catalogSearchDebounce = setTimeout(() => {
+        nextToken = null;
+        loadCatalogResults();
+      }, 500);
+    } else {
+      render();
+    }
   });
 
   render();

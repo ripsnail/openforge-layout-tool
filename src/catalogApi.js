@@ -247,6 +247,7 @@ export async function searchBlueprints({
   limit = 50,
   nextToken = null,
   prevToken = null,
+  search = "",
   signal = null,
 } = {}) {
   const params = new URLSearchParams();
@@ -255,6 +256,15 @@ export async function searchBlueprints({
   if (limit) params.set("limit", String(limit));
   if (nextToken) params.set("next", nextToken);
   if (prevToken) params.set("previous", prevToken);
+  const searchTerms = search
+    .split("+")
+    .map((term) => term.trim().toLowerCase())
+    .filter(Boolean);
+  if (searchTerms.length > 0) {
+    // The catalog endpoint does not handle literal plus-separated searches,
+    // so use the last term remotely and apply the complete match locally.
+    params.set("search", searchTerms.at(-1));
+  }
 
   const body = {};
   if (require.length > 0) body.require = require.map((t) => ({ tag: t }));
@@ -275,8 +285,23 @@ export async function searchBlueprints({
   if (!resp.ok) throw new Error(`Catalog API error: ${resp.status}`);
   const data = await resp.json();
 
+  const blueprints = (data.blueprints || []).filter((blueprint) => {
+    if (searchTerms.length <= 1) return true;
+    const searchable = [
+      blueprint.blueprint_name,
+      blueprint.file_name,
+      blueprint.full_name,
+      blueprint.search_text,
+      blueprint.storage_address,
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+    return searchTerms.every((term) => searchable.includes(term));
+  });
+
   return {
-    blueprints: (data.blueprints || []).map((b) => ({
+    blueprints: blueprints.map((b) => ({
       ...b,
       modelInfo: blueprintToModelInfo(b),
     })),

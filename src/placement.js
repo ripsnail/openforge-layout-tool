@@ -63,6 +63,7 @@ export class PlacementSystem {
 
     this.undoRedo = new UndoRedoManager(() => this._pruneUnusedGeometries());
     this._clipboard = [];
+    this._pasteInProgress = false;
 
     this.raycaster = new THREE.Raycaster();
     this.pointer = new THREE.Vector2();
@@ -319,7 +320,7 @@ export class PlacementSystem {
       this.activeTemplate &&
       this.templateGhosts.length > 0
     ) {
-      el.textContent = `Placing template: ${this.activeTemplate.name} — ${this.templateGhosts.length} tiles  |  Click to place, [R] rotate  [PgUp/PgDn] adjust height  [Esc] to cancel`;
+      el.textContent = `Placing template: ${this.activeTemplate.name} — ${this.templateGhosts.length} tiles  |  Click to place, [R] rotate (Shift=22.5°)  [PgUp/PgDn] adjust height (Shift=1/8")  [Esc] to cancel`;
     } else if (this.currentTool === "place" && this.activeModel) {
       const snapType = this.pendingSnap?.type || "grid";
       const snapLabel =
@@ -336,16 +337,16 @@ export class PlacementSystem {
         ((this._pendingPlaceRotation / Math.PI) * 180) % 360,
       );
       const rotLabel = rotDeg !== 0 ? ` [R] ${rotDeg}°` : "";
-      el.textContent = `Placing: ${this.activeModel.displayName} — ${snapLabel}${rotLabel} [PgUp/PgDn] adjust height  |  Esc to cancel`;
+      el.textContent = `Placing: ${this.activeModel.displayName} — ${snapLabel}${rotLabel} [R] rotate (Shift=22.5°)  [PgUp/PgDn] adjust height (Shift=1/8")  |  Esc to cancel`;
     } else if (
       this.currentTool === "select" &&
       this.selectedMeshes.length > 0
     ) {
       if (this.selectedMeshes.length === 1) {
         const info = this.selectedMeshes[0].userData.modelInfo || {};
-        el.textContent = `Selected: ${info.displayName || "model"}  |  [R] Rotate  [X/Z] tilt  (Shift=45°)  [Del] Delete  [Ctrl+C] Copy  |  [Arrows/PgUp/PgDn] move (Shift=1/8")  |  Esc to deselect`;
+        el.textContent = `Selected: ${info.displayName || "model"}  |  [R] Rotate  [X/Z] tilt  (Shift=22.5°)  [Del] Delete  [Ctrl+C] Copy  |  [Arrows/PgUp/PgDn] move (Shift=1/8")  |  Esc to deselect`;
       } else {
-        el.textContent = `${this.selectedMeshes.length} selected  |  [R] Rotate  [X/Z] tilt  (Shift=45°)  [Del] Delete  [Ctrl+C] Copy  |  [Arrows/PgUp/PgDn] move (Shift=1/8")  |  Esc to deselect`;
+        el.textContent = `${this.selectedMeshes.length} selected  |  [R] Rotate  [X/Z] tilt  (Shift=22.5°)  [Del] Delete  [Ctrl+C] Copy  |  [Arrows/PgUp/PgDn] move (Shift=1/8")  |  Esc to deselect`;
       }
     } else if (this.currentTool === "delete") {
       el.textContent = "Click a model to delete it  |  Esc to cancel";
@@ -670,6 +671,7 @@ export class PlacementSystem {
 
     if ((e.ctrlKey || e.metaKey) && e.key === "z") {
       e.preventDefault();
+      if (this._pasteInProgress) return;
       if (e.shiftKey) {
         this.undoRedo.redo();
       } else {
@@ -684,6 +686,7 @@ export class PlacementSystem {
 
     if ((e.ctrlKey || e.metaKey) && e.key === "y") {
       e.preventDefault();
+      if (this._pasteInProgress) return;
       this.undoRedo.redo();
       this._debounceBom();
       this._updateModelCount();
@@ -700,13 +703,14 @@ export class PlacementSystem {
 
     if ((e.ctrlKey || e.metaKey) && e.key === "v") {
       e.preventDefault();
+      if (this._pasteInProgress) return;
       this._paste();
       return;
     }
 
     if (e.key === "r" || e.key === "R") {
       if (this.currentTool === "place" && this.templateGhosts.length > 0) {
-        this._pendingPlaceRotation += Math.PI / 2;
+        this._pendingPlaceRotation += e.shiftKey ? Math.PI / 8 : Math.PI / 2;
         if (this.pendingSnap) {
           const snap = this.pendingSnap;
           const rot = snap.rotation + this._pendingPlaceRotation;
@@ -715,13 +719,13 @@ export class PlacementSystem {
         this.updateInfo();
         this._requestRenderFrame();
       } else if (this.currentTool === "place" && this.ghostMesh) {
-        this._pendingPlaceRotation += Math.PI / 2;
+        this._pendingPlaceRotation += e.shiftKey ? Math.PI / 8 : Math.PI / 2;
         this.ghostMesh.rotation.y =
           (this.pendingSnap?.rotation || 0) + this._pendingPlaceRotation;
         this.updateInfo();
         this._requestRenderFrame();
       } else if (this.selectedMeshes.length > 0) {
-        const angle = e.shiftKey ? Math.PI / 4 : Math.PI / 2;
+        const angle = e.shiftKey ? Math.PI / 8 : Math.PI / 2;
         if (this.selectedMeshes.length === 1) {
           const mesh = this.selectedMeshes[0];
           const oldRot = mesh.rotation.y;
@@ -738,12 +742,12 @@ export class PlacementSystem {
 
     if ((e.key === "x" || e.key === "X") && this.selectedMeshes.length > 0) {
       e.preventDefault();
-      const angle = e.shiftKey ? Math.PI / 4 : Math.PI / 2;
+      const angle = e.shiftKey ? Math.PI / 8 : Math.PI / 2;
       this._rotateSelection("x", angle);
     }
     if ((e.key === "z" || e.key === "Z") && this.selectedMeshes.length > 0) {
       e.preventDefault();
-      const angle = e.shiftKey ? Math.PI / 4 : Math.PI / 2;
+      const angle = e.shiftKey ? Math.PI / 8 : Math.PI / 2;
       this._rotateSelection("z", angle);
     }
 
@@ -1059,6 +1063,7 @@ export class PlacementSystem {
 
   _copySelection() {
     this._clipboard = this.selectedMeshes.map((m) => ({
+      modelInfo: { ...m.userData.modelInfo },
       _id: m.userData.modelInfo._id,
       fileName: m.userData.modelInfo.fileName,
       storageUrl: m.userData.modelInfo.storageUrl || null,
@@ -1072,41 +1077,45 @@ export class PlacementSystem {
   }
 
   async _paste() {
-    if (this._clipboard.length === 0) return;
+    if (this._clipboard.length === 0 || this._pasteInProgress) return;
+    this._pasteInProgress = true;
 
-    const offset = new THREE.Vector3(INCH, 0, INCH);
-    const cmds = [];
+    try {
+      const offset = new THREE.Vector3(INCH, 0, INCH);
+      const cmds = [];
 
-    for (const item of this._clipboard) {
-      let modelInfo;
-      const sourceMesh = this.placedMeshes.find(
-        (m) => m.userData.modelInfo._id === item._id,
-      );
-      if (sourceMesh) {
-        modelInfo = { ...sourceMesh.userData.modelInfo };
-      } else {
-        continue;
+      for (const item of this._clipboard) {
+        let modelInfo = item.modelInfo ? { ...item.modelInfo } : null;
+        if (!modelInfo) {
+          const sourceMesh = this.placedMeshes.find(
+            (m) => m.userData.modelInfo._id === item._id,
+          );
+          if (sourceMesh) modelInfo = { ...sourceMesh.userData.modelInfo };
+        }
+        if (!modelInfo) continue;
+        try {
+          const geo = await loadModelGeometry(modelInfo);
+          const mesh = createMesh(geo, modelInfo);
+          mesh.position.set(item.x + offset.x, item.y, item.z + offset.z);
+          mesh.rotation.set(item.rx || 0, item.ry || 0, item.rz || 0);
+          cmds.push(new PlaceCommand(this, mesh));
+        } catch (e) {
+          console.warn("Paste load failed:", item.fileName);
+          notify(`Could not paste ${item.fileName || "a tile"}.`);
+        }
       }
-      try {
-        const geo = await loadModelGeometry(modelInfo);
-        const mesh = createMesh(geo, modelInfo);
-        mesh.position.set(item.x + offset.x, item.y, item.z + offset.z);
-        mesh.rotation.set(item.rx || 0, item.ry || 0, item.rz || 0);
-        cmds.push(new PlaceCommand(this, mesh));
-      } catch (e) {
-        console.warn("Paste load failed:", item.fileName);
-        notify(`Could not paste ${item.fileName || "a tile"}.`);
-      }
-    }
 
-    if (cmds.length > 0) {
-      this.undoRedo.execute(new BatchCommand(cmds));
-      this._deselectAll();
-      for (const cmd of cmds) {
-        this._selectModel(cmd.mesh, true);
+      if (cmds.length > 0) {
+        this.undoRedo.execute(new BatchCommand(cmds));
+        this._deselectAll();
+        for (const cmd of cmds) {
+          this._selectModel(cmd.mesh, true);
+        }
+        this._saveState();
+        this._requestRenderFrame();
       }
-      this._saveState();
-      this._requestRenderFrame();
+    } finally {
+      this._pasteInProgress = false;
     }
   }
 
