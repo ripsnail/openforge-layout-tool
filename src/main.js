@@ -330,7 +330,7 @@ function initSettingsMenu(placement) {
   });
 }
 
-function initFileMenu(placement) {
+function initFileMenu(placement, palette) {
   const btn = document.getElementById("file-btn");
   const menu = document.getElementById("file-menu");
   if (!btn || !menu) return;
@@ -381,6 +381,7 @@ function initFileMenu(placement) {
           await placement.importLayout(data, ({ loaded, total }) => {
             setLoading(true, `Loading models: ${loaded}/${total}`);
           });
+          palette.refreshSavedModels();
         } catch (err) {
           console.error("Failed to load layout:", err);
           notify(
@@ -503,7 +504,7 @@ function init() {
   const toolbarBtns = document.querySelectorAll(".tool-btn");
   placement.setToolbarButtons(toolbarBtns);
 
-  initPalette((modelInfo) => {
+  const palette = initPalette((modelInfo) => {
     placement.setActiveModel(modelInfo);
   });
 
@@ -572,7 +573,7 @@ function init() {
   }
 
   initTemplatesMenu(placement);
-  initFileMenu(placement);
+  initFileMenu(placement, palette);
   initSettingsMenu(placement);
 
   const downloadAllBtn = document.getElementById("bom-download-all");

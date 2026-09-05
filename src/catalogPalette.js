@@ -174,6 +174,14 @@ export function initPalette(onSelectModel) {
 
   localTagCounts = buildTagCounts(allLocalModels);
 
+  function refreshSavedModels() {
+    const currentModels = getDownloadedModels();
+    downloadedModels.splice(0, downloadedModels.length, ...currentModels);
+    allLocalModels.splice(0, allLocalModels.length, ...currentModels);
+    localTagCounts = buildTagCounts(allLocalModels);
+    render();
+  }
+
   hydrateMetadataFromServer().then(({ added, pruned }) => {
     if ((!added || added.length === 0) && (!pruned || pruned.length === 0))
       return;
@@ -1001,5 +1009,5 @@ export function initPalette(onSelectModel) {
     loadCatalogResults();
   }
 
-  return allLocalModels;
+  return { refreshSavedModels };
 }
