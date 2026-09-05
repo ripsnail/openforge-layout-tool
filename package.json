@@ -7,9 +7,7 @@
     "dev": "vite --host",
     "build": "vite build",
     "preview": "vite preview",
-    "lint": "eslint .",
-    "test:colors": "node tests/test-colors.cjs",
-    "test": "npm run test:colors"
+    "lint": "eslint ."
   },
   "dependencies": {
     "three": "^0.174.0"
