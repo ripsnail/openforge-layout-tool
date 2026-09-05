@@ -1,7 +1,17 @@
 import { defineConfig } from 'vite';
 import { writeFileSync, mkdirSync, existsSync, readFileSync, unlinkSync, readdirSync } from 'fs';
-import { join } from 'path';
+import { join, resolve } from 'path';
 import { DatabaseSync } from 'node:sqlite';
+
+const MAX_JSON_BODY_BYTES = 1024 * 1024 * 20; // 20 MB
+
+function safeDownloadedPath(dir, fileName) {
+  if (!fileName || fileName.includes('\0')) return null;
+  const root = resolve(dir);
+  const filePath = resolve(root, fileName);
+  if (filePath !== root && !filePath.startsWith(`${root}/`)) return null;
+  return filePath;
+}
 
 function findCachedByMd5(dir, md5) {
   const exact = join(dir, `${md5}.stl`);
@@ -43,15 +53,32 @@ function openMetadataDb(dir) {
 function readJsonBody(req) {
   return new Promise((resolve, reject) => {
     const chunks = [];
-    req.on('data', (c) => chunks.push(c));
+    let size = 0;
+    let settled = false;
+    req.on('data', (c) => {
+      if (settled) return;
+      size += c.length;
+      if (size > MAX_JSON_BODY_BYTES) {
+        settled = true;
+        const error = new Error('Request body too large');
+        error.statusCode = 413;
+        reject(error);
+        req.resume();
+        return;
+      }
+      chunks.push(c);
+    });
     req.on('end', () => {
+      if (settled) return;
       try {
         resolve(JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}'));
       } catch (e) {
         reject(e);
       }
     });
-    req.on('error', reject);
+    req.on('error', (error) => {
+      if (!settled) reject(error);
+    });
   });
 }
 
@@ -137,8 +164,9 @@ function downloadedStlPlugin() {
             } catch (e) {
               res.writeHead(400); res.end('Invalid metadata');
             }
-          }).catch(() => {
-            res.writeHead(400); res.end('Invalid metadata');
+          }).catch((error) => {
+            res.writeHead(error?.statusCode || 400);
+            res.end(error?.statusCode === 413 ? 'Request body too large' : 'Invalid metadata');
           });
           return;
         }
@@ -176,12 +204,12 @@ function downloadedStlPlugin() {
             try {
               if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
               const fileName = decodeURIComponent(req.url.slice(1));
-              if (!fileName || fileName.includes('..')) {
+              const filePath = safeDownloadedPath(dir, fileName);
+              if (!filePath) {
                 res.writeHead(400);
                 res.end('Invalid filename');
                 return;
               }
-              const filePath = join(dir, fileName);
               const fileDir = join(dir, fileName.substring(0, fileName.lastIndexOf('/')));
               if (!existsSync(fileDir)) mkdirSync(fileDir, { recursive: true });
               writeFileSync(filePath, Buffer.concat(body));
@@ -199,11 +227,11 @@ function downloadedStlPlugin() {
           });
         } else if (req.method === 'GET' || req.method === 'HEAD') {
           const fileName = decodeURIComponent(req.url.slice(1));
-          if (!fileName || fileName.includes('..')) {
+          const filePath = safeDownloadedPath(dir, fileName);
+          if (!filePath) {
             next();
             return;
           }
-          const filePath = join(dir, fileName);
           if (existsSync(filePath)) {
             const data = readFileSync(filePath);
             const ext = fileName.split('.').pop().toLowerCase();
@@ -218,11 +246,11 @@ function downloadedStlPlugin() {
           }
         } else if (req.method === 'DELETE') {
           const fileName = decodeURIComponent(req.url.slice(1));
-          if (!fileName || fileName.includes('..')) {
+          const filePath = safeDownloadedPath(dir, fileName);
+          if (!filePath) {
             next();
             return;
           }
-          const filePath = join(dir, fileName);
           if (existsSync(filePath)) {
             unlinkSync(filePath);
           }

@@ -1,4 +1,4 @@
-import { generateModelId, resolveTextureColor } from './modelCatalog.js';
+import { generateModelId, resolveTextureColor, getThemeInfo } from './modelCatalog.js';
 
 const API_BASE = '/catalog-api';
 
@@ -19,58 +19,7 @@ export async function fetchWithTimeout(url, options = {}, timeoutMs = 30000) {
   }
 }
 
-const CATALOG_THEMES = {
-  'dungeon_stone': { color: 0x8a8a98, label: 'Dungeon Stone' },
-  'cut-stone': { color: 0x9a9a8a, label: 'Cut Stone' },
-  'towne': { color: 0xc4b99a, label: 'Towne' },
-  'wood': { color: 0x6b4b2b, label: 'Wood' },
-  'plain': { color: 0x9a9a9a, label: 'Plain' },
-  'sewer': { color: 0x5a6a5a, label: 'Sewer' },
-  'cave': { color: 0x6a5a4a, label: 'Cave' },
-  'aztlan': { color: 0x8a7a5a, label: 'Aztlan' },
-  'rough_stone': { color: 0x7b7b6b, label: 'Rough Stone' },
-  'streets': { color: 0x8a7a6a, label: 'Streets' },
-  'shingles': { color: 0xb05a3c, label: 'Shingles' },
-  // Treat version names as normal themes by including them here.
-  'stucco': { color: 0xd4c4a8, label: 'Stucco' },
-  'bricks_sidewalk': { color: 0xb05a3c, label: 'Bricks Sidewalk' },
-};
-
-function parseThemeParts(theme) {
-  const sep = theme.match(/[%+]/);
-  if (sep) {
-    const idx = theme.indexOf(sep[0]);
-    return { set: theme.slice(0, idx), version: theme.slice(idx + 1) };
-  }
-  const lastUnderscore = theme.lastIndexOf('_');
-  if (lastUnderscore >= 0) {
-    return { set: theme.slice(0, lastUnderscore), version: theme.slice(lastUnderscore + 1) };
-  }
-  return { set: theme, version: null };
-}
-
-function hashStringToColor(str) {
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    hash = str.charCodeAt(i) + ((hash << 5) - hash);
-  }
-  const r = (hash >> 16) & 0xff;
-  const g = (hash >> 8) & 0xff;
-  const b = hash & 0xff;
-  return ((r & 0xf0) << 4) | ((g & 0xf0)) | ((b & 0xf0) >> 4);
-}
-
-function getCatalogThemeInfo(theme) {
-  if (CATALOG_THEMES[theme]) return CATALOG_THEMES[theme];
-  const normalized = theme.replace(/%/g, '_');
-  if (CATALOG_THEMES[normalized]) return CATALOG_THEMES[normalized];
-  const { set, version } = parseThemeParts(theme);
-  if (CATALOG_THEMES[set] && set === 'shingles') return CATALOG_THEMES[set];
-  if (version && CATALOG_THEMES[version]) return CATALOG_THEMES[version];
-  if (CATALOG_THEMES[set]) return CATALOG_THEMES[set];
-  const label = theme.replace(/[+_%-]/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-  return { color: hashStringToColor(theme), label };
-}
+const getCatalogThemeInfo = getThemeInfo;
 
 export function parseCatalogTags(tags, blueprint) {
   const tagSet = new Set(tags);
@@ -235,7 +184,6 @@ export async function searchBlueprints({ require = [], deny = [], limit = 50, ne
   if (!resp.ok) throw new Error(`Catalog API error: ${resp.status}`);
   const data = await resp.json();
 
-  console.log('[catalog] search', { require, deny, limit, found: (data.blueprints || []).length, total: data.paging?.total_count });
 
   return {
     blueprints: (data.blueprints || []).map(b => ({
@@ -281,8 +229,7 @@ export async function downloadBlueprintSTL(blueprint, onProgress) {
     offset += chunk.length;
   }
 
-  console.log('[catalog] STL downloaded', blueprint.file_name || blueprint.blueprint_name, `${received} bytes`);
   return buffer;
 }
 
-export { CATALOG_THEMES, getCatalogThemeInfo };
+export { getCatalogThemeInfo };

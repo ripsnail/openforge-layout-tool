@@ -8,7 +8,17 @@ const downloadCache = new Map();
 let manifest = [];
 
 function safeEncode(str) {
-  return str.replace(/[^a-zA-Z0-9._-]/g, c => '_' + c.charCodeAt(0).toString(16).padStart(2, '0'));
+  const value = String(str || '');
+  const encoded = value.replace(/[^a-zA-Z0-9.-]/g, c => '_' + c.charCodeAt(0).toString(16).padStart(2, '0'));
+  if (encoded.length <= 180) return encoded;
+
+  let hash = 2166136261;
+  for (let i = 0; i < value.length; i++) {
+    hash ^= value.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  const suffix = `_${(hash >>> 0).toString(16).padStart(8, '0')}`;
+  return `${encoded.slice(0, 180 - suffix.length)}${suffix}`;
 }
 
 function stlName(sha) {
@@ -118,32 +128,6 @@ export function initDownloadedModels() {
   for (const entry of manifest) {
     registerModelId(entry._id);
   }
-
-  try {
-    if (!localStorage.getItem('openforge-manifest-purge-1')) {
-      const survivors = [];
-      let dropped = 0;
-      for (const m of manifest) {
-        const name = (m.fileName || '').toLowerCase();
-        if (name.startsWith('aztlan') || name.startsWith('arch')) {
-          const cached = downloadCache.get(m._id);
-          if (cached) {
-            if (cached.blobUrl) URL.revokeObjectURL(cached.blobUrl);
-            downloadCache.delete(m._id);
-          }
-          dropped++;
-        } else {
-          survivors.push(m);
-        }
-      }
-      if (dropped > 0) {
-        manifest = survivors;
-        saveManifest();
-        console.log(`[catalog] purged ${dropped} browse-polluted entries from saved models`);
-      }
-      localStorage.setItem('openforge-manifest-purge-1', '1');
-    }
-  } catch (e) {/* ignore localStorage errors */}
 
   let migrated = false;
   for (const entry of manifest) {
@@ -363,7 +347,6 @@ export async function importBlueprint(blueprint, stlArrayBuffer) {
   // scan cache invalidation removed
   saveManifest();
   if (entry.sha) syncMetadataToServer({ ...modelInfo, sha: entry.sha });
-  console.log('[catalog] imported', fileName, entry.sha || '');
   const thumbUrl = blueprint.images?.[0]?.image_url;
   if (thumbUrl) {
     cacheThumbnail(thumbNameForEntry(entry), thumbUrl).then(ok => {

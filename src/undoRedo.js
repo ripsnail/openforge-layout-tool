@@ -1,7 +1,8 @@
 export class UndoRedoManager {
-  constructor() {
+  constructor(onChange = null) {
     this.undoStack = [];
     this.redoStack = [];
+    this.onChange = onChange;
   }
 
   execute(command) {
@@ -9,6 +10,7 @@ export class UndoRedoManager {
     this.undoStack.push(command);
     this.redoStack = [];
     this._trim();
+    this.onChange?.();
   }
 
   undo() {
@@ -16,6 +18,7 @@ export class UndoRedoManager {
     const cmd = this.undoStack.pop();
     cmd.undo();
     this.redoStack.push(cmd);
+    this.onChange?.();
     return true;
   }
 
@@ -24,12 +27,27 @@ export class UndoRedoManager {
     const cmd = this.redoStack.pop();
     cmd.execute();
     this.undoStack.push(cmd);
+    this.onChange?.();
     return true;
   }
 
   clear() {
     this.undoStack = [];
     this.redoStack = [];
+    this.onChange?.();
+  }
+
+  getReferencedMeshes() {
+    const meshes = new Set();
+    const visit = (command) => {
+      if (command?.mesh) meshes.add(command.mesh);
+      for (const snapshot of command?.snapshots || []) {
+        if (snapshot.mesh) meshes.add(snapshot.mesh);
+      }
+      for (const child of command?.commands || []) visit(child);
+    };
+    for (const command of [...this.undoStack, ...this.redoStack]) visit(command);
+    return meshes;
   }
 
   _trim() {

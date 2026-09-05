@@ -1,4 +1,4 @@
-import { getOverride, applyOverride } from './modelOverrides.js';
+import { getOverride } from './modelOverrides.js';
 
 let _nextModelId = 1;
 const _usedIds = new Set();
@@ -112,6 +112,14 @@ export function getThemeColor(theme) {
     if (THEME_COLORS[fallback]) return THEME_COLORS[fallback];
   }
   return hashStringToColor(theme);
+}
+
+export function getThemeInfo(theme) {
+  const normalized = String(theme || 'plain');
+  const color = getThemeColor(normalized);
+  const { set } = parseThemeParts(normalized);
+  const label = THEME_LABELS[normalized] || THEME_LABELS[set] || normalized.replace(/[+_%-]/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+  return { color, label };
 }
 
 const TEXTURE_PRIORITY = [

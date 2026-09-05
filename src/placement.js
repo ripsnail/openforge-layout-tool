@@ -29,7 +29,7 @@ export class PlacementSystem {
     this.placedMeshes = [];
     this.currentTool = 'select';
 
-    this.undoRedo = new UndoRedoManager();
+    this.undoRedo = new UndoRedoManager(() => this._pruneUnusedGeometries());
     this._clipboard = [];
 
     this.raycaster = new THREE.Raycaster();
@@ -1261,13 +1261,21 @@ export class PlacementSystem {
     return new Set(this.placedMeshes.map(m => m.userData.modelInfo?._id || m.userData.modelInfo?.fileName).filter(Boolean));
   }
 
+  _pruneUnusedGeometries() {
+    const keepKeys = this._placedCacheKeys();
+    for (const mesh of this.undoRedo.getReferencedMeshes()) {
+      const key = mesh.userData.modelInfo?._id || mesh.userData.modelInfo?.fileName;
+      if (key) keepKeys.add(key);
+    }
+    pruneGeometries(keepKeys);
+  }
+
   _removeModel(mesh) {
     const idx = this.selectedMeshes.indexOf(mesh);
     if (idx >= 0) {
       this.selectedMeshes.splice(idx, 1);
     }
     this.undoRedo.execute(new RemoveCommand(this, mesh));
-    pruneGeometries(this._placedCacheKeys());
     this._updateBom();
     this._updateModelCount();
     this._clearOutlines();
