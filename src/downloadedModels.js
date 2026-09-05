@@ -5,6 +5,12 @@ const STORAGE_KEY = 'openforge-downloaded-models';
 const downloadCache = new Map();
 let manifest = [];
 
+let manifestByFileName = new Map();
+
+function reindexManifest() {
+  manifestByFileName = new Map(manifest.map(m => [m.fileName, m]));
+}
+
 function safeEncode(str) {
   const value = String(str || '');
   const encoded = value.replace(/[^a-zA-Z0-9.-]/g, c => '_' + c.charCodeAt(0).toString(16).padStart(2, '0'));
@@ -23,12 +29,21 @@ function stlName(sha) {
   return sha ? `${sha}.stl` : null;
 }
 
+// Binary STL layout: an 80-byte header, followed by a uint32 triangle count,
+// followed by 50 bytes (12 floats for normal+3 verts + a uint16 attribute)
+// per triangle. A file smaller than the header+count can't be valid.
+const STL_HEADER_SIZE = 84;
+const STL_BYTES_PER_TRIANGLE = 50;
+// Sanity cap to reject corrupt triangle counts before doing size
+// arithmetic on them (a real-world STL this large would be gigabytes).
+const STL_MAX_TRIANGLES = 50_000_000;
+
 function isValidStlBinary(buffer) {
-  if (buffer.byteLength < 84) return false;
+  if (buffer.byteLength < STL_HEADER_SIZE) return false;
   const view = new DataView(buffer);
   const triCount = view.getUint32(80, true);
-  if (triCount === 0) return false;
-  return buffer.byteLength === 84 + triCount * 50;
+  if (triCount === 0 || triCount > STL_MAX_TRIANGLES) return false;
+  return buffer.byteLength === STL_HEADER_SIZE + triCount * STL_BYTES_PER_TRIANGLE;
 }
 
 function isValidStl(buffer) {
@@ -152,10 +167,10 @@ export function initDownloadedModels() {
           r2.arrayBuffer().then(buf => {
             fetchWithTimeout(thumbPath(tn), { method: 'POST', body: new Uint8Array(buf) }, 30000).then(r3 => {
               if (!r3.ok) { entry.hasThumb = false; }
-            }).catch(() => { entry.hasThumb = false; });
+            }).catch(e => { console.warn(`Failed to migrate thumbnail for "${entry.fileName}":`, e); entry.hasThumb = false; });
           });
-        }).catch(() => { entry.hasThumb = false; });
-      }).catch(() => {});
+        }).catch(e => { console.warn(`Failed to fetch legacy thumbnail for "${entry.fileName}":`, e); entry.hasThumb = false; });
+      }).catch(e => { console.warn(`Failed to verify thumbnail for "${entry.fileName}":`, e); });
     }
   }
 
@@ -171,6 +186,7 @@ export function initDownloadedModels() {
     entry.modelInfo.sha = sha;
     syncMetadataToServer(entry.modelInfo);
   }
+  reindexManifest();
   return manifest;
 }
 
@@ -292,6 +308,7 @@ export async function hydrateMetadataFromServer() {
     added.push(entry.modelInfo);
   }
   if (added.length > 0) saveManifest();
+  reindexManifest();
   return { added, pruned };
 }
 
@@ -341,6 +358,7 @@ export async function importBlueprint(blueprint, stlArrayBuffer) {
     manifest.push(entry);
     registerModelId(entry._id);
   }
+  reindexManifest();
 
   saveManifest();
   if (entry.sha) syncMetadataToServer({ ...modelInfo, sha: entry.sha });
@@ -354,7 +372,7 @@ export async function importBlueprint(blueprint, stlArrayBuffer) {
 }
 
 export function isDownloaded(fileName) {
-  return manifest.some(m => m.fileName === fileName);
+  return manifestByFileName.has(fileName);
 }
 
 export function getDownloadedModels() {
@@ -375,6 +393,7 @@ export function removeDownloaded(_id) {
   } else {
     manifest = manifest.filter(m => m._id !== _id);
   }
+  reindexManifest();
   saveManifest();
   if (sha) {
     fetchWithTimeout(`/metadata/${sha}`, { method: 'DELETE' }, 15000).catch(() => {});
@@ -406,6 +425,7 @@ export function addDownloadedModelEntry(modelInfo) {
   manifest.push(entry);
   registerModelId(_id);
   saveManifest();
+  reindexManifest();
   return entry;
 }
 

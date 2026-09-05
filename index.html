@@ -3,6 +3,16 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!--
+    Defense-in-depth CSP: the app renders catalog names/tags/file names into
+    the DOM (see src/catalogPalette.js, which escapes everything routed
+    through innerHTML), so this restricts script/style/connect sources as a
+    backstop in case an escaping bug is ever missed. `img-src` allows the
+    CDN the model catalog serves thumbnails/objects from
+    (OPENFORGE_CATALOG_OBJECTS_URL default in vite.config.js) — update this
+    if that env var is overridden to point at a different host.
+  -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob: https://objects.openforge.tools; connect-src 'self'; object-src 'none'; base-uri 'self';">
   <title>OpenForge Layout Tool</title>
   <link rel="stylesheet" href="/src/styles.css">
 </head>

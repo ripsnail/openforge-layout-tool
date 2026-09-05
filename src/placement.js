@@ -274,8 +274,7 @@ export class PlacementSystem {
       el.textContent = `Placing template: ${this.activeTemplate.name} — ${this.templateGhosts.length} tiles  |  Click to place, [R] rotate  [PgUp/PgDn] adjust height  [Esc] to cancel`;
     } else if (this.currentTool === 'place' && this.activeModel) {
       const snapType = this.pendingSnap?.type || 'grid';
-      const snapLabel = snapType === 'point-pair' ? 'snapped' :
-                        snapType === 'on-base' ? 'on base' :
+      const snapLabel = snapType === 'on-base' ? 'on base' :
                         snapType === 'on-secret-door-bottom' ? 'on door' :
                         snapType === 'blocked' ? 'blocked' :
                         snapType === 'free' ? 'free' :
@@ -309,12 +308,14 @@ export class PlacementSystem {
   }
 
   _updateToolbar() {
-    document.querySelectorAll('.tool-btn').forEach(btn => {
+    const buttons = this._toolbarButtons || document.querySelectorAll('.tool-btn');
+    buttons.forEach(btn => {
       btn.classList.toggle('active', btn.dataset.tool === this.currentTool);
     });
   }
 
   setToolbarButtons(buttons) {
+    this._toolbarButtons = buttons;
     buttons.forEach(btn => {
       if (!btn.dataset.tool) return;
       btn.addEventListener('click', () => {
@@ -347,7 +348,7 @@ export class PlacementSystem {
       if (intersectPoint) {
         const anchorInfo = this.templateTiles[0].modelInfo;
         const snap = this._snapWithConnections(intersectPoint, anchorInfo, this._pendingPlaceRotation);
-        const rot = snap.type === 'point-pair' ? snap.rotation : snap.rotation + this._pendingPlaceRotation;
+        const rot = snap.rotation + this._pendingPlaceRotation;
         this._commitTemplate(snap.position, rot);
       }
       return;
@@ -357,7 +358,7 @@ export class PlacementSystem {
       const intersectPoint = this._getGroundIntersect();
       if (intersectPoint) {
         const snap = this._snapWithConnections(intersectPoint, this.activeModel, this._pendingPlaceRotation);
-        const rot = snap.type === 'point-pair' ? snap.rotation : snap.rotation + this._pendingPlaceRotation;
+        const rot = snap.rotation + this._pendingPlaceRotation;
         this._placeModel(snap.position, rot);
       }
       return;
@@ -418,79 +419,103 @@ export class PlacementSystem {
     this.pointer.x = ((clientX - rect.left) / rect.width) * 2 - 1;
     this.pointer.y = -((clientY - rect.top) / rect.height) * 2 + 1;
 
-    if (this.currentTool === 'place' && this.activeTemplate && this.templateTiles.length > 0) {
-      const intersectPoint = this._getGroundIntersect();
-      if (intersectPoint) {
-        const anchorInfo = this.templateTiles[0].modelInfo;
-        const snap = this._snapWithConnections(intersectPoint, anchorInfo, this._pendingPlaceRotation);
-        this.pendingSnap = snap;
-        const rot = snap.type === 'point-pair' ? snap.rotation : snap.rotation + this._pendingPlaceRotation;
-        this._layoutTemplateGhosts(snap.position, rot);
-        this.updateInfo();
-      } else {
-        for (const ghost of this.templateGhosts) ghost.visible = false;
+    this._updateTemplateGhostSnap();
+    this._updateActiveModelGhostSnap();
+    this._updateDragMove(rect);
+    this._updateMarquee(clientX, clientY);
+    this._updateHoverCursor();
+  }
+
+  // Re-snaps and repositions the template-placement ghost group to follow
+  // the pointer, if a multi-model template is currently being placed.
+  _updateTemplateGhostSnap() {
+    if (!(this.currentTool === 'place' && this.activeTemplate && this.templateTiles.length > 0)) return;
+
+    const intersectPoint = this._getGroundIntersect();
+    if (intersectPoint) {
+      const anchorInfo = this.templateTiles[0].modelInfo;
+      const snap = this._snapWithConnections(intersectPoint, anchorInfo, this._pendingPlaceRotation);
+      this.pendingSnap = snap;
+      const rot = snap.rotation + this._pendingPlaceRotation;
+      this._layoutTemplateGhosts(snap.position, rot);
+      this.updateInfo();
+    } else {
+      for (const ghost of this.templateGhosts) ghost.visible = false;
+    }
+  }
+
+  // Re-snaps and repositions the single-model placement ghost to follow the
+  // pointer, if a single model is currently being placed.
+  _updateActiveModelGhostSnap() {
+    if (!(this.currentTool === 'place' && this.activeModel && this.activeGeometry)) return;
+
+    const intersectPoint = this._getGroundIntersect();
+    if (intersectPoint) {
+      const snap = this._snapWithConnections(intersectPoint, this.activeModel, this._pendingPlaceRotation);
+      this.pendingSnap = snap;
+      const rot = snap.rotation + this._pendingPlaceRotation;
+      this._updateGhost(snap.position, rot);
+      this.updateInfo();
+    } else {
+      this._clearGhost();
+    }
+  }
+
+  // Drags the current selection along the ground plane, if a drag gesture
+  // (past the drag threshold) is in progress in the select tool.
+  _updateDragMove(rect) {
+    if (!(this.currentTool === 'select' && this._dragStartPoint && this.selectedMeshes.length > 0)) return;
+
+    const dx = this.pointer.x - this._dragStartPoint.x;
+    const dy = this.pointer.y - this._dragStartPoint.y;
+    if (!this._isDragging && Math.sqrt(dx * dx + dy * dy) > this._dragThreshold / rect.width) {
+      this._isDragging = true;
+      this.controls.enabled = false;
+    }
+    if (this._isDragging) {
+      const startHit = this._getGroundIntersectAt(this._dragStartPoint);
+      const currentHit = this._getGroundIntersect();
+      if (startHit && currentHit) {
+        const delta = currentHit.clone().sub(startHit);
+        for (const mesh of this.selectedMeshes) {
+          const start = this._dragStartPositions.get(mesh);
+          if (start) {
+            mesh.position.set(start.x + delta.x, start.y, start.z + delta.z);
+          }
+        }
+        this._syncOutlinesMove();
       }
     }
+  }
 
-    if (this.currentTool === 'place' && this.activeModel && this.activeGeometry) {
-      const intersectPoint = this._getGroundIntersect();
-      if (intersectPoint) {
-        const snap = this._snapWithConnections(intersectPoint, this.activeModel, this._pendingPlaceRotation);
-        this.pendingSnap = snap;
-        const rot = snap.type === 'point-pair' ? snap.rotation : snap.rotation + this._pendingPlaceRotation;
-        this._updateGhost(snap.position, rot);
-        
-        this.updateInfo();
-      } else {
-        this._clearGhost();        
-      }
-    }
+  // Resizes/repositions the marquee-select rectangle overlay to follow the
+  // pointer, if a marquee-select gesture is in progress.
+  _updateMarquee(clientX, clientY) {
+    if (!(this._isMarquee && this._marqueeStart)) return;
 
-    if (this.currentTool === 'select' && this._dragStartPoint && this.selectedMeshes.length > 0) {
-      const dx = this.pointer.x - this._dragStartPoint.x;
-      const dy = this.pointer.y - this._dragStartPoint.y;
-      if (!this._isDragging && Math.sqrt(dx * dx + dy * dy) > this._dragThreshold / rect.width) {
-        this._isDragging = true;
+    const dx = clientX - this._marqueeStart.x;
+    const dy = clientY - this._marqueeStart.y;
+    if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
+      if (!this._marqueeEl) {
+        this._marqueeEl = document.createElement('div');
+        this._marqueeEl.className = 'marquee-rect';
+        document.querySelector('#viewport').appendChild(this._marqueeEl);
         this.controls.enabled = false;
       }
-      if (this._isDragging) {
-        const startHit = this._getGroundIntersectAt(this._dragStartPoint);
-        const currentHit = this._getGroundIntersect();
-        if (startHit && currentHit) {
-          const delta = currentHit.clone().sub(startHit);
-          for (const mesh of this.selectedMeshes) {
-            const start = this._dragStartPositions.get(mesh);
-            if (start) {
-              mesh.position.set(start.x + delta.x, start.y, start.z + delta.z);
-            }
-          }
-          this._syncOutlinesMove();
-        }
-      }
+      const vp = document.querySelector('#viewport').getBoundingClientRect();
+      const x1 = Math.max(0, Math.min(this._marqueeStart.x - vp.left, clientX - vp.left));
+      const y1 = Math.max(0, Math.min(this._marqueeStart.y - vp.top, clientY - vp.top));
+      const x2 = Math.min(vp.width, Math.max(this._marqueeStart.x - vp.left, clientX - vp.left));
+      const y2 = Math.min(vp.height, Math.max(this._marqueeStart.y - vp.top, clientY - vp.top));
+      this._marqueeEl.style.left = x1 + 'px';
+      this._marqueeEl.style.top = y1 + 'px';
+      this._marqueeEl.style.width = (x2 - x1) + 'px';
+      this._marqueeEl.style.height = (y2 - y1) + 'px';
     }
+  }
 
-    if (this._isMarquee && this._marqueeStart) {
-      const dx = clientX - this._marqueeStart.x;
-      const dy = clientY - this._marqueeStart.y;
-      if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
-        if (!this._marqueeEl) {
-          this._marqueeEl = document.createElement('div');
-          this._marqueeEl.className = 'marquee-rect';
-          document.querySelector('#viewport').appendChild(this._marqueeEl);
-          this.controls.enabled = false;
-        }
-        const vp = document.querySelector('#viewport').getBoundingClientRect();
-        const x1 = Math.max(0, Math.min(this._marqueeStart.x - vp.left, clientX - vp.left));
-        const y1 = Math.max(0, Math.min(this._marqueeStart.y - vp.top, clientY - vp.top));
-        const x2 = Math.min(vp.width, Math.max(this._marqueeStart.x - vp.left, clientX - vp.left));
-        const y2 = Math.min(vp.height, Math.max(this._marqueeStart.y - vp.top, clientY - vp.top));
-        this._marqueeEl.style.left = x1 + 'px';
-        this._marqueeEl.style.top = y1 + 'px';
-        this._marqueeEl.style.width = (x2 - x1) + 'px';
-        this._marqueeEl.style.height = (y2 - y1) + 'px';
-      }
-    }
-
+  // Updates the viewport cursor to reflect what a click would currently do.
+  _updateHoverCursor() {
     if (this.currentTool === 'select' && !this._isDragging) {
       const hits = this._raycastPlaced();
       document.querySelector('#viewport').style.cursor =
@@ -544,15 +569,14 @@ export class PlacementSystem {
         this._pendingPlaceRotation += Math.PI / 2;
         if (this.pendingSnap) {
           const snap = this.pendingSnap;
-          const rot = snap.type === 'point-pair' ? snap.rotation : snap.rotation + this._pendingPlaceRotation;
+          const rot = snap.rotation + this._pendingPlaceRotation;
           this._layoutTemplateGhosts(snap.position, rot);
         }
         this.updateInfo();
         this._requestRenderFrame();
       } else if (this.currentTool === 'place' && this.ghostMesh) {
         this._pendingPlaceRotation += Math.PI / 2;
-        const snapType = this.pendingSnap?.type;
-        this.ghostMesh.rotation.y = snapType === 'point-pair' ? (this.pendingSnap?.rotation || 0) : (this.pendingSnap?.rotation || 0) + this._pendingPlaceRotation;
+        this.ghostMesh.rotation.y = (this.pendingSnap?.rotation || 0) + this._pendingPlaceRotation;
         this.updateInfo();
         this._requestRenderFrame();
       } else if (this.selectedMeshes.length > 0) {
@@ -633,7 +657,7 @@ export class PlacementSystem {
       this._pendingPlaceHeight += e.key === 'PageUp' ? step : -step;
       if (this.pendingSnap) {
         const snap = this.pendingSnap;
-        const rot = snap.type === 'point-pair' ? snap.rotation : snap.rotation + this._pendingPlaceRotation;
+        const rot = snap.rotation + this._pendingPlaceRotation;
         if (this.templateGhosts.length > 0) {
           this._layoutTemplateGhosts(snap.position, rot);
         } else if (this.ghostMesh) {
@@ -1015,9 +1039,6 @@ export class PlacementSystem {
       gridPt.y = y;
       return { position: gridPt, rotation: 0, type: 'grid' };
     }
-
-    // point-pair snapping (openlock/magnetic) disabled — always fall back
-    // to grid/free snapping.
 
     return { position: gridPoint, rotation: 0, type: 'grid' };
   }

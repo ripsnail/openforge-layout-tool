@@ -7,6 +7,10 @@ const DB_NAME = 'openforge-stl-cache';
 const STORE_NAME = 'stl-buffers';
 const DB_VERSION = 1;
 
+// Fraction of cached entries (oldest-updated first) removed by a single
+// evictOldest() pass.
+const DEFAULT_EVICTION_FRACTION = 0.25;
+
 let dbPromise = null;
 
 function openDb() {
@@ -52,7 +56,7 @@ export async function getCachedStlBuffer(sha) {
   }
 }
 
-async function evictOldest(fraction = 0.25) {
+async function evictOldest(fraction = DEFAULT_EVICTION_FRACTION) {
   const db = await openDb();
   const tx = db.transaction(STORE_NAME, 'readonly');
   const idx = tx.objectStore(STORE_NAME).index('updatedAt');

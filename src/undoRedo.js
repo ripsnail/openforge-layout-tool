@@ -1,3 +1,7 @@
+// Caps memory/mesh-reference growth for very long editing sessions; older
+// history beyond this depth is simply dropped.
+const MAX_UNDO_STACK_SIZE = 200;
+
 export class UndoRedoManager {
   constructor(onChange = null) {
     this.undoStack = [];
@@ -51,8 +55,8 @@ export class UndoRedoManager {
   }
 
   _trim() {
-    if (this.undoStack.length > 200) {
-      this.undoStack = this.undoStack.slice(-200);
+    if (this.undoStack.length > MAX_UNDO_STACK_SIZE) {
+      this.undoStack = this.undoStack.slice(-MAX_UNDO_STACK_SIZE);
     }
   }
 }

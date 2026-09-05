@@ -29,16 +29,21 @@ export async function fetchWithTimeout(url, options = {}, timeoutMs = 30000) {
 
 const getCatalogThemeInfo = getThemeInfo;
 
-export function parseCatalogTags(tags, blueprint) {
-  const tagSet = new Set(tags);
+// --- parseCatalogTags() helpers -------------------------------------------
+// Each helper parses one unrelated category of OpenForge catalog tags out of
+// the flat `tags` array. Split out of parseCatalogTags() so each concern can
+// be read/tested in isolation.
 
-  let primaryType = 'other';
-  if (tagSet.has('shape|floor')) primaryType = 'floor';
-  else if (tagSet.has('shape|base')) primaryType = 'base';
-  else if (tagSet.has('shape|wall')) primaryType = 'wall';
-  else if (tagSet.has('shape|column')) primaryType = 'column';
-  else if (tagSet.has('shape|corner')) primaryType = 'corner';
+function parsePrimaryType(tagSet) {
+  if (tagSet.has('shape|floor')) return 'floor';
+  if (tagSet.has('shape|base')) return 'base';
+  if (tagSet.has('shape|wall')) return 'wall';
+  if (tagSet.has('shape|column')) return 'column';
+  if (tagSet.has('shape|corner')) return 'corner';
+  return 'other';
+}
 
+function parseTypeTags(tagSet, primaryType) {
   const typeTags = [];
   if (primaryType !== 'other') typeTags.push(primaryType);
 
@@ -52,33 +57,37 @@ export function parseCatalogTags(tags, blueprint) {
   if (tagSet.has('build|thick wall')) typeTags.push('thick_wall');
   if (tagSet.has('shape|corner')) typeTags.push('corner');
   if (tagSet.has('component|secret_door')) typeTags.push('secret_door');
+  return typeTags;
+}
 
-  let theme;
+function parseTextureTags(tags) {
   let versionTheme = null;
   const textureSets = [];
   const textureTags = [];
   for (const tag of tags) {
-    if (tag.startsWith('texture|')) {
-      const parts = tag.split('|');
-      if (parts.length === 3) {
-        versionTheme = parts[1] + '%' + parts[2];
-        textureTags.push({ name: parts[2], isVersion: true, tag });
-        if (!textureSets.includes(parts[1])) {
-          textureSets.push(parts[1]);
-        }
-        if (!textureTags.some(t => t.name === parts[1] && !t.isVersion)) {
-          textureTags.push({ name: parts[1], isVersion: false, tag: `texture|${parts[1]}` });
-        }
-      } else if (parts.length === 2 && parts[1] !== 'plain' && !textureSets.includes(parts[1])) {
+    if (!tag.startsWith('texture|')) continue;
+    const parts = tag.split('|');
+    if (parts.length === 3) {
+      versionTheme = parts[1] + '%' + parts[2];
+      textureTags.push({ name: parts[2], isVersion: true, tag });
+      if (!textureSets.includes(parts[1])) {
         textureSets.push(parts[1]);
-        if (!textureTags.some(t => t.name === parts[1])) {
-          textureTags.push({ name: parts[1], isVersion: false, tag });
-        }
+      }
+      if (!textureTags.some(t => t.name === parts[1] && !t.isVersion)) {
+        textureTags.push({ name: parts[1], isVersion: false, tag: `texture|${parts[1]}` });
+      }
+    } else if (parts.length === 2 && parts[1] !== 'plain' && !textureSets.includes(parts[1])) {
+      textureSets.push(parts[1]);
+      if (!textureTags.some(t => t.name === parts[1])) {
+        textureTags.push({ name: parts[1], isVersion: false, tag });
       }
     }
   }
-  theme = versionTheme || textureSets.join('+') || 'plain';
+  const theme = versionTheme || textureSets.join('+') || 'plain';
+  return { theme, textureTags };
+}
 
+function parseFormat(tags) {
   let format = null;
   for (const tag of tags) {
     if (tag.startsWith('connection|') && !tag.startsWith('connection|side') && !tag.startsWith('connection|pegs')) {
@@ -90,7 +99,10 @@ export function parseCatalogTags(tags, blueprint) {
       }
     }
   }
+  return format;
+}
 
+function parseAttributes(tagSet) {
   const attributes = [];
   if (tagSet.has('connection|magnetic|flex')) {
     attributes.push('magnetic', 'flex');
@@ -103,17 +115,21 @@ export function parseCatalogTags(tags, blueprint) {
   if (tagSet.has('connection|side')) attributes.push('side');
   if (tagSet.has('connection|left')) attributes.push('left');
   if (tagSet.has('connection|right')) attributes.push('right');
+  return attributes;
+}
 
+// Model grid footprint (in tiles), e.g. { x: 2, y: 1 }. Prefers explicit
+// `size|width|N` / `size|depth|N` tags, falling back to parsing conventional
+// size hints out of the file name (e.g. "...2x1...", "...BA...").
+function parseSize(tags, blueprint) {
   let sizeX = null;
   let sizeY = null;
   for (const tag of tags) {
     if (tag.startsWith('size|width|')) {
-      const val = tag.split('|')[2];
-      sizeX = parseFloat(val) || null;
+      sizeX = parseFloat(tag.split('|')[2]) || null;
     }
     if (tag.startsWith('size|depth|')) {
-      const val = tag.split('|')[2];
-      sizeY = parseFloat(val) || null;
+      sizeY = parseFloat(tag.split('|')[2]) || null;
     }
   }
 
@@ -138,7 +154,18 @@ export function parseCatalogTags(tags, blueprint) {
 
   if (sizeX !== null && sizeY === null) sizeY = sizeX;
   if (sizeX === null && sizeY !== null) sizeX = sizeY;
-  const size = (sizeX !== null) ? { x: sizeX, y: sizeY } : null;
+  return (sizeX !== null) ? { x: sizeX, y: sizeY } : null;
+}
+
+export function parseCatalogTags(tags, blueprint) {
+  const tagSet = new Set(tags);
+
+  const primaryType = parsePrimaryType(tagSet);
+  const typeTags = parseTypeTags(tagSet, primaryType);
+  const { theme, textureTags } = parseTextureTags(tags);
+  const format = parseFormat(tags);
+  const attributes = parseAttributes(tagSet);
+  const size = parseSize(tags, blueprint);
 
   const themeInfo = getCatalogThemeInfo(theme);
 

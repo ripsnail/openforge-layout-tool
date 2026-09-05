@@ -1,10 +1,11 @@
 import { defineConfig } from 'vite';
-import { writeFileSync, mkdirSync, existsSync, readFileSync, unlinkSync, readdirSync } from 'fs';
+import { writeFileSync, mkdirSync, existsSync, readFileSync, unlinkSync, readdirSync, realpathSync } from 'fs';
 import { join } from 'path';
 import { DatabaseSync } from 'node:sqlite';
-import { isValidMd5, safeDownloadedPath, findCachedByMd5 as findCachedByMd5Pure } from './server/pathUtils.js';
+import { isValidMd5, safeDownloadedPath as safeDownloadedPathPure, findCachedByMd5 as findCachedByMd5Pure } from './server/pathUtils.js';
 
 const MAX_JSON_BODY_BYTES = 1024 * 1024 * 20; // 20 MB
+const MAX_DOWNLOAD_BODY_BYTES = 1024 * 1024 * 200; // 200 MB
 
 // Dev-server proxy targets. Override via env vars so this can point at a
 // local/staging/production catalog without editing source.
@@ -16,8 +17,39 @@ function rejectPath(reason, value) {
   return null;
 }
 
+function safeDownloadedPath(dir, fileName) {
+  return safeDownloadedPathPure(dir, fileName, { existsSync, realpathSync });
+}
+
 function findCachedByMd5(dir, md5) {
   return findCachedByMd5Pure(dir, md5, { existsSync, readdirSync });
+}
+
+// This middleware has no authentication of its own — it relies entirely on
+// only ever being reachable from a trusted network (see docker-compose.yml:
+// bound to localhost/the host network, never exposed directly to the
+// internet). As a defense-in-depth backstop against cross-origin
+// writes/deletes (e.g. a malicious page in another tab issuing a fetch()
+// against this origin), state-changing requests additionally require the
+// Origin/Referer header (when present) to match the request's Host.
+function isTrustedOrigin(req) {
+  const host = req.headers.host;
+  if (!host) return false;
+  const matchesHost = (value) => {
+    try {
+      return new URL(value).host === host;
+    } catch (e) {
+      return false;
+    }
+  };
+  const origin = req.headers.origin;
+  if (origin) return matchesHost(origin);
+  const referer = req.headers.referer;
+  if (referer) return matchesHost(referer);
+  // Neither header present: browsers send at least one of these on
+  // fetch/XHR requests, so treat their total absence as untrusted rather
+  // than silently allowing it.
+  return false;
 }
 
 function openMetadataDb(dir) {
@@ -140,6 +172,10 @@ function downloadedStlPlugin() {
           return;
         }
         if (req.method === 'POST') {
+          if (!isTrustedOrigin(req)) {
+            res.writeHead(403); res.end('Forbidden');
+            return;
+          }
           readJsonBody(req).then((info) => {
             try {
               if (!info || typeof info !== 'object') throw new Error('Invalid body');
@@ -166,6 +202,10 @@ function downloadedStlPlugin() {
           return;
         }
         if (req.method === 'DELETE') {
+          if (!isTrustedOrigin(req)) {
+            res.writeHead(403); res.end('Forbidden');
+            return;
+          }
           deleteMeta.run(sha);
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ ok: true }));
@@ -194,9 +234,27 @@ function downloadedStlPlugin() {
 
       server.middlewares.use('/downloaded', (req, res, next) => {
         if (req.method === 'POST') {
+          if (!isTrustedOrigin(req)) {
+            res.writeHead(403); res.end('Forbidden');
+            return;
+          }
           let body = [];
-          req.on('data', chunk => body.push(chunk));
+          let size = 0;
+          let rejected = false;
+          req.on('data', chunk => {
+            if (rejected) return;
+            size += chunk.length;
+            if (size > MAX_DOWNLOAD_BODY_BYTES) {
+              rejected = true;
+              res.writeHead(413);
+              res.end('File too large');
+              req.destroy();
+              return;
+            }
+            body.push(chunk);
+          });
           req.on('end', () => {
+            if (rejected) return;
             try {
               if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
               const fileName = decodeURIComponent(req.url.slice(1));
@@ -243,6 +301,10 @@ function downloadedStlPlugin() {
             res.end('Not found');
           }
         } else if (req.method === 'DELETE') {
+          if (!isTrustedOrigin(req)) {
+            res.writeHead(403); res.end('Forbidden');
+            return;
+          }
           const fileName = decodeURIComponent(req.url.slice(1));
           const filePath = safeDownloadedPath(dir, fileName);
           if (!filePath) {

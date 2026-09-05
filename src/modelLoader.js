@@ -9,6 +9,46 @@ import { getThemeColorOverride } from './settings.js';
 const geometryCache = new Map();
 const materialCache = new Map();
 
+// Standard (non-ghost) placed-model material appearance. Slightly rough,
+// mostly non-metallic — reads well as painted/printed plastic under the
+// scene's lighting.
+const MODEL_MATERIAL_ROUGHNESS = 0.7;
+const MODEL_MATERIAL_METALNESS = 0.1;
+
+// Safety-net caps on the in-memory geometry/material caches: callers that
+// track "currently placed" keys should still call pruneGeometries()
+// proactively, but these LRU limits stop memory from growing unboundedly
+// even if a caller forgets, or during very long sessions that load many
+// distinct models (e.g. browsing the catalog extensively).
+const GEOMETRY_CACHE_LIMIT = 300;
+const MATERIAL_CACHE_LIMIT = 150;
+
+// Reads `key` from `map` and, if present, refreshes its recency (Map
+// iteration order is insertion order, so re-inserting moves it to the
+// "most recently used" end).
+function lruGet(map, key) {
+  if (!map.has(key)) return undefined;
+  const value = map.get(key);
+  map.delete(key);
+  map.set(key, value);
+  return value;
+}
+
+// Writes `key`/`value` into `map`, evicting the least-recently-used
+// entries (oldest insertion order) once `limit` is exceeded. `onEvict` is
+// called with each evicted [key, value] so the caller can dispose GPU
+// resources.
+function lruSet(map, key, value, limit, onEvict) {
+  map.delete(key);
+  map.set(key, value);
+  while (map.size > limit) {
+    const oldestKey = map.keys().next().value;
+    const oldestValue = map.get(oldestKey);
+    map.delete(oldestKey);
+    onEvict?.(oldestKey, oldestValue);
+  }
+}
+
 // Drops cached geometries not in `keepKeys` (same key derivation as
 // loadModelGeometry: modelInfo._id || modelInfo.fileName). Call after
 // meshes are removed so long sessions don't pin every geometry forever.
@@ -41,8 +81,9 @@ const pendingGeometryLoads = new Map();
 
 export async function loadModelGeometry(modelInfo) {
   const cacheKey = modelInfo._id || modelInfo.fileName;
-  if (geometryCache.has(cacheKey)) {
-    return geometryCache.get(cacheKey);
+  const cachedGeometry = lruGet(geometryCache, cacheKey);
+  if (cachedGeometry) {
+    return cachedGeometry;
   }
   if (pendingGeometryLoads.has(cacheKey)) {
     return pendingGeometryLoads.get(cacheKey);
@@ -80,7 +121,7 @@ async function fetchAndCacheGeometry(modelInfo, cacheKey, fileName) {
         let geometry = loader.parse(cached);
         geometry = convertZupToYup(geometry);
         centerGeometry(geometry);
-        geometryCache.set(cacheKey, geometry);
+        lruSet(geometryCache, cacheKey, geometry, GEOMETRY_CACHE_LIMIT, (k, g) => { try { g?.dispose(); } catch (e) { /* best effort */ } });
         return { fromCdn: false, buffer: cached };
       }
     } catch (e) { /* fall through to network */ }
@@ -123,7 +164,7 @@ async function fetchAndCacheGeometry(modelInfo, cacheKey, fileName) {
   let geometry = loader.parse(buffer);
   geometry = convertZupToYup(geometry);
   centerGeometry(geometry);
-  geometryCache.set(cacheKey, geometry);
+  lruSet(geometryCache, cacheKey, geometry, GEOMETRY_CACHE_LIMIT, (k, g) => { try { g?.dispose(); } catch (e) { /* best effort */ } });
 
   return { fromCdn, buffer };
 }
@@ -191,17 +232,17 @@ export function resolveModelColor(modelInfo) {
 export function createMesh(geometry, modelInfo) {
   const color = resolveModelColor(modelInfo);
   modelInfo.color = color;
-  const cacheKey = `${color}_0.7_0.1`;
-  let material = materialCache.get(cacheKey);
+  const cacheKey = `${color}_${MODEL_MATERIAL_ROUGHNESS}_${MODEL_MATERIAL_METALNESS}`;
+  let material = lruGet(materialCache, cacheKey);
   if (!material) {
     material = new THREE.MeshStandardMaterial({
       color,
-      roughness: 0.7,
-      metalness: 0.1,
+      roughness: MODEL_MATERIAL_ROUGHNESS,
+      metalness: MODEL_MATERIAL_METALNESS,
       flatShading: false,
     });
     material.userData.shared = true;
-    materialCache.set(cacheKey, material);
+    lruSet(materialCache, cacheKey, material, MATERIAL_CACHE_LIMIT, (k, m) => { try { m?.dispose(); } catch (e) { /* best effort */ } });
   }
 
   const mesh = new THREE.Mesh(geometry, material);
@@ -220,17 +261,17 @@ export function createMesh(geometry, modelInfo) {
 export function recolorMesh(mesh, modelInfo) {
   const color = resolveModelColor(modelInfo);
   modelInfo.color = color;
-  const cacheKey = `${color}_0.7_0.1`;
-  let material = materialCache.get(cacheKey);
+  const cacheKey = `${color}_${MODEL_MATERIAL_ROUGHNESS}_${MODEL_MATERIAL_METALNESS}`;
+  let material = lruGet(materialCache, cacheKey);
   if (!material) {
     material = new THREE.MeshStandardMaterial({
       color,
-      roughness: 0.7,
-      metalness: 0.1,
+      roughness: MODEL_MATERIAL_ROUGHNESS,
+      metalness: MODEL_MATERIAL_METALNESS,
       flatShading: false,
     });
     material.userData.shared = true;
-    materialCache.set(cacheKey, material);
+    lruSet(materialCache, cacheKey, material, MATERIAL_CACHE_LIMIT, (k, m) => { try { m?.dispose(); } catch (e) { /* best effort */ } });
   }
   disposeMeshMaterial(mesh);
   mesh.material = material;
