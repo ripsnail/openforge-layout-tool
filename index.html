@@ -45,10 +45,10 @@
       <div id="tab-bar">
         <div id="tab-list"></div>
         <div class="toolbar-dropdown" id="new-file-wrapper">
-          <button id="tab-new" title="New file">+</button>
-          <div id="new-file-menu" class="dropdown-menu">
-            <button data-action="new-blank">New Blank</button>
-            <button data-action="new-duplicate">Duplicate Current</button>
+          <button id="tab-new" title="New file" aria-haspopup="menu" aria-expanded="false">+</button>
+          <div id="new-file-menu" class="dropdown-menu" role="menu">
+            <button role="menuitem" data-action="new-blank">New Blank</button>
+            <button role="menuitem" data-action="new-duplicate">Duplicate Current</button>
           </div>
         </div>
       </div>
@@ -59,15 +59,15 @@
       </div>
       <div id="toolbar">
         <div class="toolbar-dropdown">
-          <button class="tool-btn toolbar-menu-btn" id="file-btn">File</button>
-          <div class="dropdown-menu" id="file-menu">
-            <button data-action="save">Save Layout...</button>
-            <button data-action="load">Load Layout...</button>
+          <button class="tool-btn toolbar-menu-btn" id="file-btn" aria-haspopup="menu" aria-expanded="false">File</button>
+          <div class="dropdown-menu" id="file-menu" role="menu">
+            <button role="menuitem" data-action="save">Save Layout...</button>
+            <button role="menuitem" data-action="load">Load Layout...</button>
           </div>
         </div>
         <div class="toolbar-dropdown">
-          <button class="tool-btn toolbar-menu-btn" id="templates-btn">Templates</button>
-          <div class="dropdown-menu" id="templates-menu"></div>
+          <button class="tool-btn toolbar-menu-btn" id="templates-btn" aria-haspopup="menu" aria-expanded="false">Templates</button>
+          <div class="dropdown-menu" id="templates-menu" role="menu"></div>
         </div>
         <div class="toolbar-separator"></div>
         <button class="tool-btn active" data-tool="select" title="Select (Q)">Select</button>
@@ -75,8 +75,8 @@
         <button class="tool-btn" data-tool="delete" title="Delete (D)">Delete</button>
         <div class="toolbar-separator"></div>
         <div class="toolbar-dropdown">
-          <button class="tool-btn toolbar-menu-btn" id="settings-btn">Settings</button>
-          <div class="dropdown-menu settings-menu" id="settings-menu"></div>
+          <button class="tool-btn toolbar-menu-btn" id="settings-btn" aria-haspopup="menu" aria-expanded="false">Settings</button>
+          <div class="dropdown-menu settings-menu" id="settings-menu" role="menu"></div>
         </div>
       </div>
       <div id="info-bar">

@@ -72,7 +72,7 @@ below are the remaining gaps, bugs, and cleanup opportunities.
 
 ## 4. Accessibility
 
-- [ ] **Dropdown menus (`#file-menu`, `#templates-menu`, `#settings-menu`,
+- [x] **Dropdown menus (`#file-menu`, `#templates-menu`, `#settings-menu`,
   `#new-file-menu`, `#context-menu`) have no keyboard navigation or focus
   management.** Opening a menu via mouse click doesn't move focus into it,
   `Escape` doesn't consistently close all of them (only some paths call

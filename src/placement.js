@@ -745,6 +745,8 @@ export class PlacementSystem {
     const menu = document.createElement('div');
     menu.id = 'context-menu';
     menu.className = 'context-menu';
+    menu.setAttribute('role', 'menu');
+    menu.setAttribute('aria-label', 'Tile actions');
 
     const mi = mesh.userData.modelInfo || {};
     const textureTags = getEffectiveTextureTags(mi) || [];
@@ -785,6 +787,7 @@ export class PlacementSystem {
     for (const opt of TEXTURE_OPTIONS) {
       const item = document.createElement('button');
       item.className = 'context-menu-item' + (opt.name === currentOverride ? ' active' : '');
+      item.setAttribute('role', 'menuitem');
       item.textContent = opt.label;
       item.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -801,6 +804,7 @@ export class PlacementSystem {
 
       const clear = document.createElement('button');
       clear.className = 'context-menu-item';
+      clear.setAttribute('role', 'menuitem');
       clear.textContent = 'Remove texture override';
       clear.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -818,6 +822,7 @@ export class PlacementSystem {
     const top = Math.min(y, viewport.clientHeight - mh - 4);
     menu.style.left = Math.max(4, left) + 'px';
     menu.style.top = Math.max(4, top) + 'px';
+    menu.querySelector('button')?.focus();
   }
 
   _setTextureOverride(mesh, name) {
