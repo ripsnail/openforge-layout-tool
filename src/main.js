@@ -10,6 +10,7 @@ import {
   createFile, renameFile, deleteFile, switchToFile,
   saveFileData, loadFileData
 } from './fileManager.js';
+import { notify } from './notifications.js';
 
 function initSidebarResize() {
   const handle = document.getElementById('sidebar-resize');
@@ -312,6 +313,7 @@ function initFileMenu(placement) {
           await placement.importLayout(data);
         } catch (err) {
           console.error('Failed to load layout:', err);
+          notify('Could not load that layout. Check that the file is valid JSON and try again.');
         }
       });
       input.click();

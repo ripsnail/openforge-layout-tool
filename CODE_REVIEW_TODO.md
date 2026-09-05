@@ -59,7 +59,7 @@ below are the remaining gaps, bugs, and cleanup opportunities.
   non-blocking toast/notification for at least the "N of M tiles failed to
   load" case.
 
-- [ ] **`main.js` load-layout error handling**: `loadItem` click handler
+- [x] **`main.js` load-layout error handling**: `loadItem` click handler
   catches `JSON.parse`/`importLayout` failures and only logs to console —
   the user gets no indication their "Load Layout" action failed. Add a
   visible error message.
